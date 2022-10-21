@@ -4,26 +4,11 @@
 
 const LibModule = require('./lib')
 
-function runMain(method) {
+function runMain() {
     LibModule().then( lib => {
         const a = performance.now()
-        if (method === 'thread') {
-            lib.thread()
-        }
-        if (method === 'serial') {
-            lib.serial()
-        }
-        if (method === 'mutex') {
-            lib.mutex()
-        }
-        if (method === 'go') {
-            lib.go()
-        }
-        
-        console.log( `${method} done in ${(performance.now()-a)}ms` )
+        lib.go()
     })
 }
 
-// runMain('thread')
-// runMain('serial')
-runMain('go')
+runMain()

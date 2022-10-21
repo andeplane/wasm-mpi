@@ -10,10 +10,7 @@
         </style>
     </head>
     <body>
-        <button class="favorite styled" type="button" onclick="runMain('thread')">Main thread</button>
-        <button class="favorite styled" type="button" onclick="runMain('serial')">Main serial</button><br><br>
-        <button class="favorite styled" type="button" onclick="runWorker('thread')">Worker thread</button>
-        <button class="favorite styled" type="button" onclick="runWorker('serial')">Worker Serial</button>
+        <button class="favorite styled" type="button" onclick="runMain()">Run</button>
         <script src="lib.js"></script>
         <script>
             function runWorker(method) {
@@ -22,11 +19,9 @@
                 worker.postMessage(method)
             }
 
-            function runMain(method) {
+            function runMain() {
                 LibModule().then( lib => {
-                    const a = performance.now()
-                    method === 'thread' ? lib.thread() : lib.serial() ;
-                    console.log( `${method} done in ${(performance.now()-a)}ms` )
+                    lib.go()
                 })
             }
         </script>
