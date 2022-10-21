@@ -64,7 +64,15 @@ void main_func(int rank) {
     MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 
     MPI_Barrier(MPI_COMM_WORLD);
-
+    double *array = new double[10];
+    memset(array, 10, sizeof(double));
+    if (rank == 0) {
+        for (int i = 0; i < 10; i++) {
+            array[i] = 10;
+        }
+    }
+    MPI_Bcast(array, 10, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    printf("I am thread %d with value %f\n", rank, array[0]);
     // Get the name of the processor
     char processor_name[MPI_MAX_PROCESSOR_NAME];
     int name_len;

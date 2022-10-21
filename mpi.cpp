@@ -125,7 +125,7 @@ int MPI_Get_library_version(char *version, int *resultlen)
 
 int MPI_Get_processor_name(char *name, int *resultlen)
 {
-  const char host[] = "wasmmpi";
+  const char host[] = "wasm-mpi";
   int len;
 
   if (!name || !resultlen) return MPI_ERR_ARG;
@@ -177,7 +177,7 @@ int MPI_Comm_size(MPI_Comm comm, int *nprocs)
 
 int MPI_Abort(MPI_Comm comm, int errorcode)
 {
-  printf("MPI_Abort\n");
+  printf("MPI_Abort called.\n");
   exit(1);
   return 0;
 }
@@ -186,17 +186,16 @@ int MPI_Abort(MPI_Comm comm, int errorcode)
 
 int MPI_Finalize()
 {
-  printf("MPI_Finalize\n");
   pthread_t thread_id = pthread_self();
   auto thread_count = thread_id_map.count(thread_id);
   auto finalize_count = finalized_map.count(thread_id);
 
   if (thread_count == 0) {
-    printf("MPI Stub WARNING: MPI not yet initialized\n");
+    printf("MPI WARNING: MPI not yet initialized\n");
     return 1;
   }
   if (finalize_count == 1) {
-    printf("MPI Stub WARNING: MPI already finalized\n");
+    printf("MPI WARNING: MPI already finalized\n");
     return 1;
   }
   finalized_map[thread_id] = true;
@@ -602,9 +601,19 @@ int MPI_Barrier(MPI_Comm comm)
 }
 
 /* ---------------------------------------------------------------------- */
-
+void *bcast_buffer = nullptr;
 int MPI_Bcast(void *buf, int count, MPI_Datatype datatype, int root, MPI_Comm comm)
 {
+  if (get_rank() == root) {
+    bcast_buffer = buf;
+    barrier.arrive_and_wait();
+    barrier.arrive_and_wait();
+    bcast_buffer = nullptr;
+  } else {
+    barrier.arrive_and_wait();
+    memcpy(buf, bcast_buffer, count * sizeof(datatype));
+    barrier.arrive_and_wait();
+  }
   printf("MPI_Bcast\n");
   return 0;
 }
