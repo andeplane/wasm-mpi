@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+    <title>pthread test</title>
+    <head>
+        <style>
+            .styled:hover {
+                background-color: rgb(140, 139, 139);
+            }
+
+        </style>
+    </head>
+    <body>
+        <button class="favorite styled" type="button" onclick="runMain('thread')">Main thread</button>
+        <button class="favorite styled" type="button" onclick="runMain('serial')">Main serial</button><br><br>
+        <button class="favorite styled" type="button" onclick="runWorker('thread')">Worker thread</button>
+        <button class="favorite styled" type="button" onclick="runWorker('serial')">Worker Serial</button>
+        <script src="lib.js"></script>
+        <script>
+            function runWorker(method) {
+                const worker = new Worker('./worker.js')
+                worker.onmessage = e => console.log(e)
+                worker.postMessage(method)
+            }
+
+            function runMain(method) {
+                LibModule().then( lib => {
+                    const a = performance.now()
+                    method === 'thread' ? lib.thread() : lib.serial() ;
+                    console.log( `${method} done in ${(performance.now()-a)}ms` )
+                })
+            }
+        </script>
+    </body>
+</html>
