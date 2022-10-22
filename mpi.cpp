@@ -717,12 +717,10 @@ int MPI_Bcast(void *buf, int count, MPI_Datatype datatype, int root, MPI_Comm co
 int MPI_Allreduce(void *sendbuf, void *recvbuf, int count, MPI_Datatype datatype, MPI_Op op,
                   MPI_Comm comm)
 {
-  printf("MPI_Allreduce\n");
-  int n = count * stubtypesize(datatype);
-
-  if (sendbuf == MPI_IN_PLACE || recvbuf == MPI_IN_PLACE) return 0;
-  memcpy(recvbuf, sendbuf, n);
-  return 0;
+  MPI_Reduce(sendbuf, recvbuf, count, datatype, op, 0, comm);
+  MPI_Bcast(recvbuf, count, datatype, 0, comm);
+  
+  return MPI_SUCCESS;
 }
 
 /* ---------------------------------------------------------------------- */
