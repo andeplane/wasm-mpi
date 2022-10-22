@@ -67,15 +67,27 @@ void cart(int rank, int size) {
   
 }
 
+void reduce(int rank, int size) {
+  int count = 10;
+  std::vector<double> d_values(count, 10);
+  std::vector<double> d_reduce(count);
+  MPI_Reduce(d_values.data(), d_reduce.data(), count, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+
+  if (rank == 0) {
+    printf("MPI_Reduce: I am thread %d with value %f\n", rank, d_reduce[0]);
+  }
+}
+
 void run(int rank, int size) {
 #ifdef THREADS_MPI
   MPI_Register_Thread(rank);
   MPI_Init(NULL, NULL);
 #endif
 
-  send_and_recv(rank, size);
-  bcast(rank, size);
-  cart(rank, size);
+  // send_and_recv(rank, size);
+  // bcast(rank, size);
+  // cart(rank, size);
+  reduce(rank, size);
 }
 
 int main(int argc, char* argv[]) {

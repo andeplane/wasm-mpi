@@ -6,7 +6,7 @@
    Copyright (2003) Sandia Corporation.  Under the terms of Contract
    DE-AC04-94AL85000 with Sandia Corporation, the U.S. Government retains
    certain rights in this software.  This software is distributed under
-   the GNU General Public License.
+   the GNU Genesize_datatyperal Public License.
 
    See the README file in the top-level LAMMPS directory.
 ------------------------------------------------------------------------- */
@@ -50,7 +50,7 @@ typedef struct _mpi_double_int double_int;
 int nextra_datatype;
 MPI_Datatype *ptr_datatype[MAXEXTRA_DATATYPE];
 int index_datatype[MAXEXTRA_DATATYPE];
-int size_datatype[MAXEXTRA_DATATYPE];
+size_t size_datatype[MAXEXTRA_DATATYPE];
 
 static std::map<pthread_t,int> thread_id_map;
 static std::map<int,bool> finalized_map;
@@ -102,9 +102,21 @@ void MPI_Register_Thread(int rank) {
   while (initialize_counter < rank) {
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }
+
   thread_id_map[pthread_self()] = rank;
   initialize_counter+=1;
-  // barrier.arrive_and_wait();
+  if (rank == 0) {
+    size_datatype[MPI_INT] = sizeof(int);
+    size_datatype[MPI_FLOAT] = sizeof(float);
+    size_datatype[MPI_DOUBLE] = sizeof(double);
+    size_datatype[MPI_CHAR] = sizeof(char);
+    size_datatype[MPI_BYTE] = sizeof(char);
+    size_datatype[MPI_LONG] = sizeof(long);
+    size_datatype[MPI_LONG_LONG] = sizeof(long long);
+    size_datatype[MPI_DOUBLE_INT] = sizeof(double)+sizeof(int);
+  }
+
+  barrier.arrive_and_wait();
 }
 
 int MPI_Init(int *argc, char ***argv)
@@ -717,14 +729,83 @@ int MPI_Allreduce(void *sendbuf, void *recvbuf, int count, MPI_Datatype datatype
 
 /* copy values from data1 to data2 */
 
+template <typename T> void reduce_op(T *dest, T *source, int count, MPI_Op op) {
+  for (int i = 0; i < count; i++) {
+    if (op == MPI_SUM) {
+      dest[i] += source[i];
+    }
+    if (op == MPI_MAX) {
+      dest[i] = std::max(dest[i], source[i]);
+    }
+    if (op == MPI_MIN) {
+      dest[i] = std::min(dest[i], source[i]);
+    }
+  }
+}
+
+#include <vector>
+
+std::vector<double> tmprecvbuffer;
 int MPI_Reduce(void *sendbuf, void *recvbuf, int count, MPI_Datatype datatype, MPI_Op op, int root,
                MPI_Comm comm)
 {
-  printf("MPI_Reduce\n");
-  int n = count * stubtypesize(datatype);
+  if (get_size() == 1) {
+    printf("MPI_Reduce not supported for 1 thread.");
+    return 1;
+  }
 
-  if (sendbuf == MPI_IN_PLACE || recvbuf == MPI_IN_PLACE) return 0;
-  memcpy(recvbuf, sendbuf, n);
+  if (root == get_rank()) {
+    assert(op != MPI_MAXLOC && "MPI_Reduce does not support MPI_MAXLOC.");
+    assert(op != MPI_MINLOC && "MPI_Reduce does not support MPI_MINLOC.");
+    assert(op != MPI_LOR && "MPI_Reduce does not support MPI_LOR.");
+    assert(datatype != MPI_BYTE && "MPI_Reduce does not support MPI_BYTE.");
+
+    if (count > tmprecvbuffer.size()) {
+      tmprecvbuffer.resize(5 * count);
+    }
+    
+    memcpy(recvbuf, sendbuf, count * size_datatype[datatype]);
+    double *dblptr = reinterpret_cast<double *>(sendbuf);
+    printf("Value starts at %f\n", dblptr[0]);
+    dblptr = reinterpret_cast<double *>(recvbuf);
+    printf("Value after initial copy %f\n", dblptr[0]);
+
+    for (int i = 0; i < get_size(); i++) {
+      if (i == root) {
+        continue;
+      }
+      MPI_Recv(tmprecvbuffer.data(), count, datatype, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+      if (datatype == MPI_INT) {
+        reduce_op(reinterpret_cast<int*>(recvbuf), reinterpret_cast<int*>(tmprecvbuffer.data()), count, op);
+      }
+      if (datatype == MPI_FLOAT) {
+        reduce_op(reinterpret_cast<float*>(recvbuf), reinterpret_cast<float*>(tmprecvbuffer.data()), count, op);
+      }
+      if (datatype == MPI_DOUBLE) {
+        reduce_op(reinterpret_cast<double*>(recvbuf), reinterpret_cast<double*>(tmprecvbuffer.data()), count, op);
+        printf("And now %f\n", dblptr[0]);
+      }
+      if (datatype == MPI_CHAR) {
+        reduce_op(reinterpret_cast<char*>(recvbuf), reinterpret_cast<char*>(tmprecvbuffer.data()), count, op);
+      }
+      if (datatype == MPI_BYTE) {
+        printf("MPI_SUM of MPI_BYTE is not supported");
+      }
+      if (datatype == MPI_LONG) {
+        reduce_op(reinterpret_cast<long*>(recvbuf), reinterpret_cast<long*>(tmprecvbuffer.data()), count, op);
+      }
+      if (datatype == MPI_LONG_LONG) {
+        reduce_op(reinterpret_cast<long long*>(recvbuf), reinterpret_cast<long long*>(tmprecvbuffer.data()), count, op);
+      }
+      if (datatype == MPI_DOUBLE_INT) {
+        printf("MPI_SUM of MPI_DOUBLE_INT is not supported");
+      }
+    }
+  } else {
+    MPI_Send(sendbuf, count, datatype, 0, 0, MPI_COMM_WORLD);
+  }
+  
   return 0;
 }
 
