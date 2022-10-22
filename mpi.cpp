@@ -55,8 +55,27 @@ size_t size_datatype[MAXEXTRA_DATATYPE];
 static std::map<pthread_t,int> thread_id_map;
 static std::map<int,bool> finalized_map;
 static std::map<int,bool> initialized_map;
+static std::atomic<int64_t> initialize_counter = 0;
 
 std::barrier barrier(2);
+
+int get_rank() {
+  return thread_id_map[pthread_self()];
+}
+
+int get_size() {
+  return thread_id_map.size();
+}
+
+void MPI_Reset() {
+  if (get_rank() == 0) {
+    thread_id_map.clear();
+    finalized_map.clear();
+    initialized_map.clear();
+    initialize_counter = 0;
+  }
+  barrier.arrive_and_wait();
+}
 
 // std::function 
 MPI_STATE::MPI_STATE(int num_threads) : 
@@ -73,30 +92,9 @@ MPI_STATE::MPI_STATE(int num_threads) :
 
 MPI_STATE state(2);
 
-// static int _num_threads = 2;
-// MPI_STATE &get_state(int num_threads = _num_threads)
-// {
-//   _num_threads = num_threads;
-  
-//   /* Initializes bar the first time through this function */
-//   static MPI_STATE state(num_threads);
-
-//   return state;
-// }
-
 /* ---------------------------------------------------------------------- */
 /* MPI Functions */
 /* ---------------------------------------------------------------------- */
-
-int get_rank() {
-  return thread_id_map[pthread_self()];
-}
-
-int get_size() {
-  return thread_id_map.size();
-}
-
-static std::atomic<int64_t> initialize_counter = 0;
 
 void MPI_Register_Thread(int rank) {
   while (initialize_counter < rank) {
@@ -743,7 +741,7 @@ template <typename T> void reduce_op(T *dest, T *source, int count, MPI_Op op) {
 
 #include <vector>
 
-std::map<int, void*> reducebuffermap;
+std::map<int, void*> reduce_buffermap;
 std::atomic<int64_t> reduce_counter = 0;
 int MPI_Reduce(void *sendbuf, void *recvbuf, int count, MPI_Datatype datatype, MPI_Op op, int root,
                MPI_Comm comm)
@@ -758,7 +756,7 @@ int MPI_Reduce(void *sendbuf, void *recvbuf, int count, MPI_Datatype datatype, M
   while (reduce_counter < get_rank()) {
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
-  reducebuffermap[get_rank()] = sendbuf;
+  reduce_buffermap[get_rank()] = sendbuf;
   reduce_counter++;
   barrier.arrive_and_wait();
   
@@ -770,25 +768,25 @@ int MPI_Reduce(void *sendbuf, void *recvbuf, int count, MPI_Datatype datatype, M
         continue;
       }
       if (datatype == MPI_INT) {
-        reduce_op(reinterpret_cast<int*>(recvbuf), reinterpret_cast<int*>(reducebuffermap[i]), count, op);
+        reduce_op(reinterpret_cast<int*>(recvbuf), reinterpret_cast<int*>(reduce_buffermap[i]), count, op);
       }
       if (datatype == MPI_FLOAT) {
-        reduce_op(reinterpret_cast<float*>(recvbuf), reinterpret_cast<float*>(reducebuffermap[i]), count, op);
+        reduce_op(reinterpret_cast<float*>(recvbuf), reinterpret_cast<float*>(reduce_buffermap[i]), count, op);
       }
       if (datatype == MPI_DOUBLE) {
-        reduce_op(reinterpret_cast<double*>(recvbuf), reinterpret_cast<double*>(reducebuffermap[i]), count, op);
+        reduce_op(reinterpret_cast<double*>(recvbuf), reinterpret_cast<double*>(reduce_buffermap[i]), count, op);
       }
       if (datatype == MPI_CHAR) {
-        reduce_op(reinterpret_cast<char*>(recvbuf), reinterpret_cast<char*>(reducebuffermap[i]), count, op);
+        reduce_op(reinterpret_cast<char*>(recvbuf), reinterpret_cast<char*>(reduce_buffermap[i]), count, op);
       }
       if (datatype == MPI_BYTE) {
         printf("MPI_SUM of MPI_BYTE is not supported");
       }
       if (datatype == MPI_LONG) {
-        reduce_op(reinterpret_cast<long*>(recvbuf), reinterpret_cast<long*>(reducebuffermap[i]), count, op);
+        reduce_op(reinterpret_cast<long*>(recvbuf), reinterpret_cast<long*>(reduce_buffermap[i]), count, op);
       }
       if (datatype == MPI_LONG_LONG) {
-        reduce_op(reinterpret_cast<long long*>(recvbuf), reinterpret_cast<long long*>(reducebuffermap[i]), count, op);
+        reduce_op(reinterpret_cast<long long*>(recvbuf), reinterpret_cast<long long*>(reduce_buffermap[i]), count, op);
       }
       if (datatype == MPI_DOUBLE_INT) {
         printf("MPI_SUM of MPI_DOUBLE_INT is not supported");
@@ -801,7 +799,7 @@ int MPI_Reduce(void *sendbuf, void *recvbuf, int count, MPI_Datatype datatype, M
 }
 
 /* ---------------------------------------------------------------------- */
-std::map<int, void*> scanbuffermap;
+std::map<int, void*> scan_buffermap;
 std::atomic<int64_t> scan_counter = 0;
 int MPI_Scan(void *sendbuf, void *recvbuf, int count, MPI_Datatype datatype, MPI_Op op,
              MPI_Comm comm)
@@ -816,7 +814,7 @@ int MPI_Scan(void *sendbuf, void *recvbuf, int count, MPI_Datatype datatype, MPI
   while (scan_counter < get_rank()) {
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
-  scanbuffermap[get_rank()] = recvbuf;
+  scan_buffermap[get_rank()] = recvbuf;
   memcpy(recvbuf, sendbuf, count * size_datatype[datatype]);
   
   scan_counter+=1;
@@ -835,25 +833,25 @@ int MPI_Scan(void *sendbuf, void *recvbuf, int count, MPI_Datatype datatype, MPI
 
   if (get_rank() > 0) {
     if (datatype == MPI_INT) {
-      reduce_op(reinterpret_cast<int*>(recvbuf), reinterpret_cast<int*>(scanbuffermap[get_rank()-1]), count, op);
+      reduce_op(reinterpret_cast<int*>(recvbuf), reinterpret_cast<int*>(scan_buffermap[get_rank()-1]), count, op);
     }
     if (datatype == MPI_FLOAT) {
-      reduce_op(reinterpret_cast<float*>(recvbuf), reinterpret_cast<float*>(scanbuffermap[get_rank()-1]), count, op);
+      reduce_op(reinterpret_cast<float*>(recvbuf), reinterpret_cast<float*>(scan_buffermap[get_rank()-1]), count, op);
     }
     if (datatype == MPI_DOUBLE) {
-      reduce_op(reinterpret_cast<double*>(recvbuf), reinterpret_cast<double*>(scanbuffermap[get_rank()-1]), count, op);
+      reduce_op(reinterpret_cast<double*>(recvbuf), reinterpret_cast<double*>(scan_buffermap[get_rank()-1]), count, op);
     }
     if (datatype == MPI_CHAR) {
-      reduce_op(reinterpret_cast<char*>(recvbuf), reinterpret_cast<char*>(scanbuffermap[get_rank()-1]), count, op);
+      reduce_op(reinterpret_cast<char*>(recvbuf), reinterpret_cast<char*>(scan_buffermap[get_rank()-1]), count, op);
     }
     if (datatype == MPI_BYTE) {
       printf("MPI_SUM of MPI_BYTE is not supported");
     }
     if (datatype == MPI_LONG) {
-      reduce_op(reinterpret_cast<long*>(recvbuf), reinterpret_cast<long*>(scanbuffermap[get_rank()-1]), count, op);
+      reduce_op(reinterpret_cast<long*>(recvbuf), reinterpret_cast<long*>(scan_buffermap[get_rank()-1]), count, op);
     }
     if (datatype == MPI_LONG_LONG) {
-      reduce_op(reinterpret_cast<long long*>(recvbuf), reinterpret_cast<long long*>(scanbuffermap[get_rank()-1]), count, op);
+      reduce_op(reinterpret_cast<long long*>(recvbuf), reinterpret_cast<long long*>(scan_buffermap[get_rank()-1]), count, op);
     }
     if (datatype == MPI_DOUBLE_INT) {
       printf("MPI_SUM of MPI_DOUBLE_INT is not supported");

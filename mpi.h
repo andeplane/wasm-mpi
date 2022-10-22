@@ -81,7 +81,7 @@ struct MPI_STATE {
   // std::vector<std::barrier<std::function<void()>>> send_barriers(8, std::barrier(2));
   MPI_STATE(int num_threads);
 };
-
+void MPI_Reset();
 typedef void MPI_User_function(void *invec, void *inoutvec, int *len, MPI_Datatype *datatype);
 
 /* MPI data structs */

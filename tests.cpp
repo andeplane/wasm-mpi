@@ -1,16 +1,15 @@
-#ifdef THREADS_MPI
 #include "mpi.h"
+// #include "acutest.h"
 #include <thread>
-#include<barrier>
-#else
-#include <mpi.h>
-#endif
-
+#include <barrier>
+#include <vector>
 #include <stdio.h>
 #include <stdlib.h>
-#include <vector>
 
 void send_and_recv(int rank, int size) {
+  MPI_Register_Thread(rank);
+  MPI_Init(NULL, NULL);
+
   std::vector<double> array(10);
   
   if (rank == 0) {
@@ -21,11 +20,13 @@ void send_and_recv(int rank, int size) {
   } else {
     MPI_Recv(array.data(), 10, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
   }
-
+  MPI_Finalize();
   printf("MPI_Send / MPI_Recv: I am thread %d with value %f\n", rank, array[0]);
 }
 
 void bcast(int rank, int size) {
+  MPI_Register_Thread(rank);
+  MPI_Init(NULL, NULL);
   std::vector<double> array(10);
   if (rank == 0) {
     for (int i = 0; i < 10; i++) {
@@ -33,11 +34,14 @@ void bcast(int rank, int size) {
     }
   }
   MPI_Bcast(array.data(), 10, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-  
+  MPI_Finalize();
   printf("MPI_Bcast: I am thread %d with value %f\n", rank, array[0]);
 }
 
 void cart(int rank, int size) {
+  MPI_Register_Thread(rank);
+  MPI_Init(NULL, NULL);
+
   int periods[3];
   int reorder = 0;
   periods[0] = periods[1] = periods[2] = 1;
@@ -64,10 +68,13 @@ void cart(int rank, int size) {
   printf("Shifted for 0, dim 1, displ 1: %d\n", destination);
   MPI_Cart_shift(cartesian,1,-1, &source, &destination);
   printf("Shifted for 0, dim 1, displ -1: %d\n", destination);
-  
+  MPI_Finalize();
 }
 
 void reduce(int rank, int size) {
+  MPI_Register_Thread(rank);
+  MPI_Init(NULL, NULL);
+
   int count = 10;
   std::vector<double> d_values(count, 10);
   std::vector<double> d_reduce(count);
@@ -76,64 +83,72 @@ void reduce(int rank, int size) {
   if (rank == 0) {
     printf("MPI_Reduce: I am thread %d with value %f\n", rank, d_reduce[0]);
   }
+  MPI_Finalize();
 }
 
 void allreduce(int rank, int size) {
+  MPI_Register_Thread(rank);
+  MPI_Init(NULL, NULL);
+
   int count = 10;
   std::vector<double> d_values(count, 10);
   std::vector<double> d_reduce(count);
   MPI_Allreduce(d_values.data(), d_reduce.data(), count, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
   printf("MPI_Allreduce: I am thread %d with value %f\n", rank, d_reduce[0]);
+  MPI_Finalize();
 }
 
 void scan(int rank, int size) {
+  MPI_Register_Thread(rank);
+  MPI_Init(NULL, NULL);
+
   int count = 10;
   std::vector<double> d_values(count, 10);
   std::vector<double> d_reduce(count);
   MPI_Scan(d_values.data(), d_reduce.data(), count, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
   printf("MPI_Scan: I am thread %d with value %f\n", rank, d_reduce[0]);
+  MPI_Finalize();
 }
-
+// void (*f)(int, int)
 void run(int rank, int size) {
-#ifdef THREADS_MPI
-  MPI_Register_Thread(rank);
-  MPI_Init(NULL, NULL);
-#endif
-
   send_and_recv(rank, size);
+  MPI_Reset();
   bcast(rank, size);
+  MPI_Reset();
   cart(rank, size);
+  MPI_Reset();
   reduce(rank, size);
+  MPI_Reset();
   allreduce(rank, size);
+  MPI_Reset();
   scan(rank, size);
+  MPI_Reset();
+  
 }
 
 int main(int argc, char* argv[]) {
-#ifdef THREADS_MPI
   int num_threads = 2;
-  // auto initialize_barrier = std::barrier(num_threads);
   std::thread t1(run, 0, 2);
   std::thread t2(run, 1, 2);
 
   t1.join();
   t2.join();
-#else
-  MPI_Init(&argc, &argv);
-  int size;
-  MPI_Comm_size(MPI_COMM_WORLD, &size);
-  if(size != 2)
-  {
-      printf("%d MPI processes used, please use 2.\n", size);
-      MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
-  }
-
-  // Prepare parameters
-  int my_rank;
-  MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
-  run(my_rank);
-#endif
-
-  MPI_Finalize();
 }
+
+// void test_initialize() {
+//   int num_threads = 2;
+//   std::thread t1(run, 0, 2);
+//   std::thread t2(run, 1, 2);
+
+//   t1.join();
+//   t2.join();
+
+//   MPI_Finalize();
+// }
+
+// TEST_LIST = {
+//     { "initialize", test_initialize }
+//     { NULL, NULL }
+// };
