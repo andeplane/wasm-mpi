@@ -21,7 +21,6 @@ void send_and_recv(int rank, int size) {
   
   if (rank == 1) {
     for (int i = 0; i < 2 * count; i++) {
-      printf("array[%d] = %f\n", i, array[i]);
       if (i < count) {
         TEST_CHECK(array[i] == i + count);
       } else {
@@ -32,14 +31,21 @@ void send_and_recv(int rank, int size) {
 }
 
 void bcast(int rank, int size) {
-  std::vector<double> array(10);
+  int count = 10;
+  std::vector<double> array(2 * count, 15);
   if (rank == 0) {
-    for (int i = 0; i < 10; i++) {
-      array[i] = 10;
+    for (int i = 0; i < count; i++) {
+      array[i] = i + count;
     }
   }
-  MPI_Bcast(array.data(), 10, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-  printf("MPI_Bcast: I am thread %d with value %f\n", rank, array[0]);
+  MPI_Bcast(array.data(), count, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+  for (int i = 0; i < 2 * count; i++) {
+    if (i < count) {
+      TEST_CHECK(array[i] == i + count);
+    } else {
+      TEST_CHECK(array[i] == 15);
+    }
+  }
 }
 
 void cart(int rank, int size) {
@@ -163,7 +169,7 @@ void test_scan() {
 
 TEST_LIST = {
     { "send_and_recv", test_send_and_recv },
-    // { "bcast", test_bcast },
+    { "bcast", test_bcast },
     // { "cart", test_cart },
     // { "reduce", test_reduce },
     // { "allreduce", test_allreduce },

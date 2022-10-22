@@ -709,7 +709,7 @@ int MPI_Bcast(void *buf, int count, MPI_Datatype datatype, int root, MPI_Comm co
     bcast_buffer = nullptr;
   } else {
     barrier.arrive_and_wait();
-    memcpy(buf, bcast_buffer, count * sizeof(datatype));
+    memcpy(buf, bcast_buffer, count * size_datatype[datatype]);
     barrier.arrive_and_wait();
   }
   return 0;
