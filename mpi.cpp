@@ -743,72 +743,64 @@ template <typename T> void reduce_op(T *dest, T *source, int count, MPI_Op op) {
 
 #include <vector>
 
-std::vector<double> tmpreducebuffer;
+std::map<int, void*> reducebuffermap;
+std::atomic<int64_t> reduce_counter = 0;
 int MPI_Reduce(void *sendbuf, void *recvbuf, int count, MPI_Datatype datatype, MPI_Op op, int root,
                MPI_Comm comm)
 {
-  if (get_size() == 1) {
-    printf("MPI_Reduce not supported for 1 thread.");
-    return 1;
+  // Reset scan counter
+  if (get_rank() == 0) {
+    reduce_counter = 0;
   }
+  barrier.arrive_and_wait();
 
-  if (root == get_rank()) {
-    assert(op != MPI_MAXLOC && "MPI_Reduce does not support MPI_MAXLOC.");
-    assert(op != MPI_MINLOC && "MPI_Reduce does not support MPI_MINLOC.");
-    assert(op != MPI_LOR && "MPI_Reduce does not support MPI_LOR.");
-    assert(datatype != MPI_BYTE && "MPI_Reduce does not support MPI_BYTE.");
-
-    if (count > tmpreducebuffer.size()) {
-      tmpreducebuffer.resize(5 * count);
-    }
-    
+  // Write send buffers to map, one thread at a time
+  while (reduce_counter < get_rank()) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  reducebuffermap[get_rank()] = sendbuf;
+  reduce_counter++;
+  barrier.arrive_and_wait();
+  
+  if (get_rank() == root) {
     memcpy(recvbuf, sendbuf, count * size_datatype[datatype]);
-    double *dblptr = reinterpret_cast<double *>(sendbuf);
-    printf("Value starts at %f\n", dblptr[0]);
-    dblptr = reinterpret_cast<double *>(recvbuf);
-    printf("Value after initial copy %f\n", dblptr[0]);
 
     for (int i = 0; i < get_size(); i++) {
       if (i == root) {
         continue;
       }
-      MPI_Recv(tmpreducebuffer.data(), count, datatype, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-
       if (datatype == MPI_INT) {
-        reduce_op(reinterpret_cast<int*>(recvbuf), reinterpret_cast<int*>(tmpreducebuffer.data()), count, op);
+        reduce_op(reinterpret_cast<int*>(recvbuf), reinterpret_cast<int*>(reducebuffermap[i]), count, op);
       }
       if (datatype == MPI_FLOAT) {
-        reduce_op(reinterpret_cast<float*>(recvbuf), reinterpret_cast<float*>(tmpreducebuffer.data()), count, op);
+        reduce_op(reinterpret_cast<float*>(recvbuf), reinterpret_cast<float*>(reducebuffermap[i]), count, op);
       }
       if (datatype == MPI_DOUBLE) {
-        reduce_op(reinterpret_cast<double*>(recvbuf), reinterpret_cast<double*>(tmpreducebuffer.data()), count, op);
-        printf("And now %f\n", dblptr[0]);
+        reduce_op(reinterpret_cast<double*>(recvbuf), reinterpret_cast<double*>(reducebuffermap[i]), count, op);
       }
       if (datatype == MPI_CHAR) {
-        reduce_op(reinterpret_cast<char*>(recvbuf), reinterpret_cast<char*>(tmpreducebuffer.data()), count, op);
+        reduce_op(reinterpret_cast<char*>(recvbuf), reinterpret_cast<char*>(reducebuffermap[i]), count, op);
       }
       if (datatype == MPI_BYTE) {
         printf("MPI_SUM of MPI_BYTE is not supported");
       }
       if (datatype == MPI_LONG) {
-        reduce_op(reinterpret_cast<long*>(recvbuf), reinterpret_cast<long*>(tmpreducebuffer.data()), count, op);
+        reduce_op(reinterpret_cast<long*>(recvbuf), reinterpret_cast<long*>(reducebuffermap[i]), count, op);
       }
       if (datatype == MPI_LONG_LONG) {
-        reduce_op(reinterpret_cast<long long*>(recvbuf), reinterpret_cast<long long*>(tmpreducebuffer.data()), count, op);
+        reduce_op(reinterpret_cast<long long*>(recvbuf), reinterpret_cast<long long*>(reducebuffermap[i]), count, op);
       }
       if (datatype == MPI_DOUBLE_INT) {
         printf("MPI_SUM of MPI_DOUBLE_INT is not supported");
       }
     }
-  } else {
-    MPI_Send(sendbuf, count, datatype, 0, 0, MPI_COMM_WORLD);
   }
-  
-  return 0;
+  barrier.arrive_and_wait();
+
+  return MPI_SUCCESS;
 }
 
 /* ---------------------------------------------------------------------- */
-std::vector<double> tmpscanbuffer;
 std::map<int, void*> scanbuffermap;
 std::atomic<int64_t> scan_counter = 0;
 int MPI_Scan(void *sendbuf, void *recvbuf, int count, MPI_Datatype datatype, MPI_Op op,
