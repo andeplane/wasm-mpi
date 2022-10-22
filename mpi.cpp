@@ -51,7 +51,8 @@ int index_datatype[MAXEXTRA_DATATYPE];
 int size_datatype[MAXEXTRA_DATATYPE];
 
 static std::map<pthread_t,int> thread_id_map;
-static std::map<pthread_t,bool> finalized_map;
+static std::map<int,bool> finalized_map;
+static std::map<int,bool> initialized_map;
 
 std::barrier barrier(2);
 
@@ -89,14 +90,20 @@ int get_rank() {
   return thread_id_map[pthread_self()];
 }
 
+void MPI_Register_Thread(int rank) {
+  thread_id_map[pthread_self()] = rank;
+  printf("Registered thread %ld with rank %d\n", pthread_self(), rank);
+}
+
 int MPI_Init(int *argc, char ***argv)
 {
-  printf("MPI_Init\n");
-  int rank = atoi( (*argv)[0] );
-  pthread_t thread_id = pthread_self();
-  
-  thread_id_map[thread_id] = rank;
-  printf("Initialized MPI with thread id %ld and rank %d\n", thread_id, rank);
+  if (thread_id_map.count(pthread_self()) == 0) {
+    printf("MPI_Init called without having called MPI_Register_Thread");
+    return 1;
+  }
+
+  initialized_map[get_rank()] = true;
+  printf("Initialized MPI with rank %d\n", get_rank());
 
   return 0;
 }
@@ -115,8 +122,7 @@ int MPI_Initialized(int *flag)
 
 int MPI_Finalized(int *flag)
 {
-  pthread_t thread_id = pthread_self();
-  *flag = (finalized_map.count(thread_id) < 0) ? 1 : 0;
+  *flag = (finalized_map.count(get_rank()) < 0) ? 1 : 0;
   printf("MPI_Finalized\n");
   return 0;
 }
@@ -208,7 +214,7 @@ int MPI_Finalize()
 {
   pthread_t thread_id = pthread_self();
   auto thread_count = thread_id_map.count(thread_id);
-  auto finalize_count = finalized_map.count(thread_id);
+  auto finalize_count = finalized_map.count(get_rank());
 
   if (thread_count == 0) {
     printf("MPI WARNING: MPI not yet initialized\n");
@@ -218,7 +224,7 @@ int MPI_Finalize()
     printf("MPI WARNING: MPI already finalized\n");
     return 1;
   }
-  finalized_map[thread_id] = true;
+  finalized_map[get_rank()] = true;
   return 0;
 }
 
@@ -362,12 +368,12 @@ int MPI_Recv(void *buf, int count, MPI_Datatype datatype, int source, int tag, M
 int MPI_Irecv(void *buf, int count, MPI_Datatype datatype, int source, int tag, MPI_Comm comm,
               MPI_Request *request)
 {
-  printf("MPI_Irecv\n");
   static int callcount = 0;
   if (callcount == 0) {
-    printf("MPI Stub WARNING: Should not recv message from self\n");
+    printf("MPI WARNING: MPI_Irecv not implemented\n");
     ++callcount;
   }
+
   return 0;
 }
 
@@ -376,9 +382,9 @@ int MPI_Irecv(void *buf, int count, MPI_Datatype datatype, int source, int tag, 
 int MPI_Wait(MPI_Request *request, MPI_Status *status)
 {
   static int callcount = 0;
-  printf("MPI_Wait\n");
   if (callcount == 0) {
-    printf("MPI Stub WARNING: Should not wait on message from self\n");
+        printf("MPI WARNING: MPI_Wait not implemented\n");
+
     ++callcount;
   }
   return 0;
@@ -388,10 +394,9 @@ int MPI_Wait(MPI_Request *request, MPI_Status *status)
 
 int MPI_Waitall(int n, MPI_Request *request, MPI_Status *status)
 {
-  printf("MPI_Waitall\n");
   static int callcount = 0;
   if (callcount == 0) {
-    printf("MPI Stub WARNING: Should not wait on message from self\n");
+    printf("MPI WARNING: MPI_Waitall not implemented\n");
     ++callcount;
   }
   return 0;
@@ -401,10 +406,9 @@ int MPI_Waitall(int n, MPI_Request *request, MPI_Status *status)
 
 int MPI_Waitany(int count, MPI_Request *request, int *index, MPI_Status *status)
 {
-  printf("MPI_Waitany\n");
   static int callcount = 0;
   if (callcount == 0) {
-    printf("MPI Stub WARNING: Should not wait on message from self\n");
+    printf("MPI WARNING: MPI_Waitany not implemented\n");
     ++callcount;
   }
   return 0;
@@ -416,12 +420,20 @@ int MPI_Sendrecv(const void *sbuf, int scount, MPI_Datatype sdatatype, int dest,
                  void *rbuf, int rcount, MPI_Datatype rdatatype, int source, int rtag,
                  MPI_Comm comm, MPI_Status *status)
 {
-  printf("MPI_Sendrecv\n");
   static int callcount = 0;
   if (callcount == 0) {
-    printf("MPI Stub WARNING: Should not send message to self\n");
+    printf("MPI WARNING: MPI_Sendrecv not implemented\n");
     ++callcount;
   }
+
+  // if (source == get_rank()) {
+  //   MPI_Send(sbuf, scount, sdatatype, dest, stag, comm);
+  //   MPI_Recv(rbuf, rcount, rdatatype, source, rtag, comm, status);
+  // } else {
+  //   MPI_Recv(sbuf, scount, sdatatype, dest, stag, comm, status);
+  //   MPI_Send(rbuf, rcount, rdatatype, source, rtag, comm);
+  // }
+
   return 0;
 }
 

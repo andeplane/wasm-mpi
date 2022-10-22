@@ -93,7 +93,7 @@ struct _MPI_Status {
 typedef struct _MPI_Status MPI_Status;
 
 /* Function prototypes for MPI stubs */
-
+void MPI_Register_Thread(int rank);
 int MPI_Init(int *argc, char ***argv);
 int MPI_Initialized(int *flag);
 int MPI_Finalized(int *flag);

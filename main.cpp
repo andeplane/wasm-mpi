@@ -46,14 +46,10 @@ void mutex() {
 
 void main_func(int rank) {
     
+    MPI_Register_Thread(rank);
     // Initialize the MPI environment
-    char **argv = new char*[1];
-    argv[0] = new char[10];
-    sprintf(argv[0], "%d", rank);
-    int args = 1;
-    MPI_Init(&args, &argv);
-    
     std::this_thread::sleep_for(std::chrono::milliseconds(2000 * rank + 1));
+    MPI_Init(NULL, NULL);
 
     // Get the number of processes
     int world_size;
@@ -84,6 +80,16 @@ void main_func(int rank) {
     }
 
     printf("MPI_Send / MPI_Recv: I am thread %d with value %f\n", rank, array[0]);
+
+    if (rank == 0) {
+        for (int i = 0; i < 10; i++) {
+            array[i] = 20;
+        }
+    }
+
+    // MPI_Sendrecv(array, )
+
+    // printf("MPI_SendRecv: I am thread %d with value %f\n", rank, array[0]);
 
     // Get the name of the processor
     char processor_name[MPI_MAX_PROCESSOR_NAME];
