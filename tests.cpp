@@ -129,8 +129,9 @@ void allreduce(int rank, int size) {
   std::vector<double> d_values(count, 10);
   std::vector<double> d_reduce(count);
   MPI_Allreduce(d_values.data(), d_reduce.data(), count, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-
-  printf("MPI_Allreduce: I am thread %d with value %f\n", rank, d_reduce[0]);
+  for (int i = 0; i < count; i++) {
+    TEST_CHECK(d_reduce[i] == 20.000000);
+  }
 }
 
 void scan(int rank, int size) {
@@ -206,8 +207,8 @@ TEST_LIST = {
     { "send_and_recv", test_send_and_recv },
     { "bcast", test_bcast },
     { "reduce", test_reduce },
+    { "allreduce", test_allreduce },
     // { "cart", test_cart },
-    // { "allreduce", test_allreduce },
     // { "scan", test_scan },
     { NULL, NULL }
 };
