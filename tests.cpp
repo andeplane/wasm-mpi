@@ -87,6 +87,15 @@ void allreduce(int rank, int size) {
   printf("MPI_Reduce: I am thread %d with value %f\n", rank, d_reduce[0]);
 }
 
+void scan(int rank, int size) {
+  int count = 10;
+  std::vector<double> d_values(count, 10);
+  std::vector<double> d_reduce(count);
+  MPI_Scan(d_values.data(), d_reduce.data(), count, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+
+  printf("MPI_Reduce: I am thread %d with value %f\n", rank, d_reduce[0]);
+}
+
 void run(int rank, int size) {
 #ifdef THREADS_MPI
   MPI_Register_Thread(rank);
@@ -98,6 +107,7 @@ void run(int rank, int size) {
   cart(rank, size);
   reduce(rank, size);
   allreduce(rank, size);
+  scan(rank, size);
 }
 
 int main(int argc, char* argv[]) {
