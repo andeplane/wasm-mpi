@@ -121,13 +121,23 @@ int MPI_Init(int *argc, char ***argv)
 {
   if (thread_id_map.count(pthread_self()) == 0) {
     printf("MPI_Init called without having called MPI_Register_Thread");
-    return 1;
+    return MPI_ERR_OTHER;
+  }
+  if (get_rank() == 0) {
+    initialize_counter = 0;
+  }
+  barrier.arrive_and_wait();
+
+  while (initialize_counter < get_rank()) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }
 
   initialized_map[get_rank()] = true;
+  initialize_counter+=1;
   printf("Initialized MPI with rank %d\n", get_rank());
-
-  return 0;
+  barrier.arrive_and_wait();
+  
+  return MPI_SUCCESS;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -136,7 +146,6 @@ int MPI_Initialized(int *flag)
 {
   pthread_t thread_id = pthread_self();
   *flag = (thread_id_map.count(thread_id) > 0) ? 1 : 0;
-  printf("MPI_Initialized\n");
   return 0;
 }
 
@@ -145,7 +154,6 @@ int MPI_Initialized(int *flag)
 int MPI_Finalized(int *flag)
 {
   *flag = (finalized_map.count(get_rank()) < 0) ? 1 : 0;
-  printf("MPI_Finalized\n");
   return 0;
 }
 
@@ -314,24 +322,23 @@ int MPI_Request_free(MPI_Request *request)
 }
 
 /* ---------------------------------------------------------------------- */
-std::map<std::pair<int,int>, const void*> mpi_send_map;
-std::map<std::pair<int,int>, int> mpi_send_size_map;
-std::map<std::pair<int,int>, MPI_Datatype> mpi_send_datatype_map;
-// std::map<std::pair<int,int>, std::barrier> mpi_send_barrier;
+std::map<std::pair<int,int>, const void*> send_map;
+std::map<std::pair<int,int>, int> send_size_map;
+std::map<std::pair<int,int>, MPI_Datatype> send_datatype_map;
 
 int MPI_Send(const void *buf, int count, MPI_Datatype datatype, int dest, int tag, MPI_Comm comm)
 {
   auto threads_pair = std::make_pair(get_rank(), dest);
   
-  mpi_send_map[threads_pair] = buf;
-  mpi_send_size_map[threads_pair] = count;
-  mpi_send_datatype_map[threads_pair] = datatype;
+  send_map[threads_pair] = buf;
+  send_size_map[threads_pair] = count;
+  send_datatype_map[threads_pair] = datatype;
   state.send_barriers[threads_pair]->arrive_and_wait();
   state.send_barriers[threads_pair]->arrive_and_wait();
   
-  mpi_send_map.erase(threads_pair);
-  mpi_send_size_map.erase(threads_pair);
-  mpi_send_datatype_map.erase(threads_pair);
+  send_map.erase(threads_pair);
+  send_size_map.erase(threads_pair);
+  send_datatype_map.erase(threads_pair);
 
   return 0;
 }
@@ -371,8 +378,8 @@ int MPI_Recv(void *buf, int count, MPI_Datatype datatype, int source, int tag, M
   auto threads_pair = std::make_pair(source, get_rank());
   
   state.send_barriers[threads_pair]->arrive_and_wait();
-  auto buffer_size = mpi_send_size_map[threads_pair] * sizeof(mpi_send_datatype_map[threads_pair]);
-  std::memcpy(buf, mpi_send_map[threads_pair], buffer_size);
+  auto buffer_size = send_size_map[threads_pair] * size_datatype[datatype];
+  std::memcpy(buf, send_map[threads_pair], buffer_size);
   state.send_barriers[threads_pair]->arrive_and_wait();
 
   return 0;

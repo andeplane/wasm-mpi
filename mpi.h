@@ -33,6 +33,7 @@
 #define MPI_COMM_WORLD 0
 
 #define MPI_SUCCESS 0
+#define MPI_ERR_OTHER 1
 #define MPI_ERR_ARG -1
 
 #define MPI_INT 1
