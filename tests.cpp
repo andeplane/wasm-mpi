@@ -95,6 +95,17 @@ void reduce(int rank, int size) {
     TEST_CHECK(d_reduce[7] == 41.000000);
     TEST_CHECK(d_reduce[8] == 44.000000);
     TEST_CHECK(d_reduce[9] == 47.000000);
+  } else {
+    for (int i = 0; i < 2 * count; i++) {
+      if (i < count) {
+        TEST_CHECK(d_values[i] == (rank + 1) * i + count);
+      } else {
+        TEST_CHECK(d_values[i] == 15);
+      }
+    }
+    for (int i = 0; i < count; i++) {
+      TEST_CHECK(d_reduce[i] == 0);
+    }
   }
 
   MPI_Reduce(d_values.data(), d_reduce.data(), count, MPI_DOUBLE, MPI_SUM, 1, MPI_COMM_WORLD);
