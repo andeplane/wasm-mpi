@@ -63,29 +63,53 @@ void cart(int rank, int size) {
   MPI_Cart_create(MPI_COMM_WORLD,3,procgrid,periods,reorder,&cartesian);
   MPI_Cart_get(cartesian,3,procgrid,periods,myloc);
   
-  printf("MPI_Cart: I am thread %d with location %d %d %d\n", rank, myloc[0], myloc[1], myloc[2]);
   int source = 0;
   int destination = 0;
   MPI_Cart_shift(cartesian,0,1, &source, &destination);
-  printf("Shifted for 0, dim 0, displ 1: %d\n", destination);
   MPI_Cart_shift(cartesian,0,-1, &source, &destination);
-  printf("Shifted for 0, dim 0, displ -1: %d\n", destination);
   
   MPI_Cart_shift(cartesian,1,1, &source, &destination);
-  printf("Shifted for 0, dim 1, displ 1: %d\n", destination);
   MPI_Cart_shift(cartesian,1,-1, &source, &destination);
-  printf("Shifted for 0, dim 1, displ -1: %d\n", destination);
-  
 }
 
 void reduce(int rank, int size) {
   int count = 10;
-  std::vector<double> d_values(count, 10);
+  std::vector<double> d_values(2 * count, 15);
+  for (int i = 0; i < count; i++) {
+    d_values[i] = (rank + 1) * i + count;
+  }
+  
   std::vector<double> d_reduce(count);
+  int initialized; 
+  MPI_Initialized(&initialized);
   MPI_Reduce(d_values.data(), d_reduce.data(), count, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-
+  
   if (rank == 0) {
-    printf("MPI_Reduce: I am thread %d with value %f\n", rank, d_reduce[0]);
+    TEST_CHECK(d_reduce[0] == 20.000000);
+    TEST_CHECK(d_reduce[1] == 23.000000);
+    TEST_CHECK(d_reduce[2] == 26.000000);
+    TEST_CHECK(d_reduce[3] == 29.000000);
+    TEST_CHECK(d_reduce[4] == 32.000000);
+    TEST_CHECK(d_reduce[5] == 35.000000);
+    TEST_CHECK(d_reduce[6] == 38.000000);
+    TEST_CHECK(d_reduce[7] == 41.000000);
+    TEST_CHECK(d_reduce[8] == 44.000000);
+    TEST_CHECK(d_reduce[9] == 47.000000);
+  }
+
+  MPI_Reduce(d_values.data(), d_reduce.data(), count, MPI_DOUBLE, MPI_SUM, 1, MPI_COMM_WORLD);
+  
+  if (rank == 1) {
+    TEST_CHECK(d_reduce[0] == 20.000000);
+    TEST_CHECK(d_reduce[1] == 23.000000);
+    TEST_CHECK(d_reduce[2] == 26.000000);
+    TEST_CHECK(d_reduce[3] == 29.000000);
+    TEST_CHECK(d_reduce[4] == 32.000000);
+    TEST_CHECK(d_reduce[5] == 35.000000);
+    TEST_CHECK(d_reduce[6] == 38.000000);
+    TEST_CHECK(d_reduce[7] == 41.000000);
+    TEST_CHECK(d_reduce[8] == 44.000000);
+    TEST_CHECK(d_reduce[9] == 47.000000);
   }
 }
 
@@ -170,8 +194,8 @@ void test_scan() {
 TEST_LIST = {
     { "send_and_recv", test_send_and_recv },
     { "bcast", test_bcast },
+    { "reduce", test_reduce },
     // { "cart", test_cart },
-    // { "reduce", test_reduce },
     // { "allreduce", test_allreduce },
     // { "scan", test_scan },
     { NULL, NULL }

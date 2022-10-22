@@ -134,7 +134,6 @@ int MPI_Init(int *argc, char ***argv)
 
   initialized_map[get_rank()] = true;
   initialize_counter+=1;
-  printf("Initialized MPI with rank %d\n", get_rank());
   barrier.arrive_and_wait();
   
   return MPI_SUCCESS;
@@ -144,8 +143,7 @@ int MPI_Init(int *argc, char ***argv)
 
 int MPI_Initialized(int *flag)
 {
-  pthread_t thread_id = pthread_self();
-  *flag = (thread_id_map.count(thread_id) > 0) ? 1 : 0;
+  *flag = (initialized_map.count(get_rank()) > 0) ? 1 : 0;
   return 0;
 }
 
@@ -239,7 +237,9 @@ int MPI_Abort(MPI_Comm comm, int errorcode)
 
 int MPI_Finalize()
 {
-  if (initialized_map.count(get_rank()) == 0) {
+  int initialized;
+  MPI_Initialized(&initialized);
+  if (initialized == 0) {
     printf("MPI WARNING: MPI not yet initialized\n");
     return 1;
   }
@@ -247,8 +247,20 @@ int MPI_Finalize()
     printf("MPI WARNING: MPI already finalized\n");
     return 1;
   }
+
+  if (get_rank() == 0) {
+    initialize_counter = 0;
+  }
+  barrier.arrive_and_wait();
+
+  while (initialize_counter < get_rank()) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+
   finalized_map[get_rank()] = true;
-  return 0;
+  initialize_counter++;
+
+  return MPI_SUCCESS;
 }
 
 /* ---------------------------------------------------------------------- */
