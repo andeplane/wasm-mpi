@@ -10,27 +10,7 @@
 #include <stdlib.h>
 #include <vector>
 
-void send_recv() {
-  // int size;
-  // MPI_Comm_size(MPI_COMM_WORLD, &size);
-  // int my_rank;
-  // MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
-
-  // int buffer_send = (my_rank == 0) ? 12345 : 67890;
-  // int buffer_recv;
-  // int tag_send = 0;
-  // int tag_recv = tag_send;
-  // int peer = (my_rank == 0) ? 1 : 0;
-
-  // // Issue the send + receive at the same time
-  // printf("MPI process %d sends value %d to MPI process %d.\n", my_rank, buffer_send, peer);
-  // MPI_Sendrecv(&buffer_send, 1, MPI_INT, peer, tag_send,
-  //               &buffer_recv, 1, MPI_INT, peer, tag_recv, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-  // printf("MPI process %d received value %d from MPI process %d.\n", my_rank, buffer_recv, peer);
-}
-
-void send_recv(int rank, int size) {
-  // printf("I am %d and will do send and receive\n", rank);
+void send_and_recv(int rank, int size) {
   std::vector<double> array(10);
   
   if (rank == 0) {
@@ -57,14 +37,45 @@ void bcast(int rank, int size) {
   printf("MPI_Bcast: I am thread %d with value %f\n", rank, array[0]);
 }
 
+void cart(int rank, int size) {
+  int periods[3];
+  int reorder = 0;
+  periods[0] = periods[1] = periods[2] = 1;
+  MPI_Comm cartesian;
+  int procgrid[3];
+  procgrid[0] = 2;
+  procgrid[1] = 1;
+  procgrid[2] = 1;
+
+  int myloc[3];
+
+  MPI_Cart_create(MPI_COMM_WORLD,3,procgrid,periods,reorder,&cartesian);
+  MPI_Cart_get(cartesian,3,procgrid,periods,myloc);
+  
+  printf("MPI_Cart: I am thread %d with location %d %d %d\n", rank, myloc[0], myloc[1], myloc[2]);
+  int source = 0;
+  int destination = 0;
+  MPI_Cart_shift(cartesian,0,1, &source, &destination);
+  printf("Shifted for 0, dim 0, displ 1: %d\n", destination);
+  MPI_Cart_shift(cartesian,0,-1, &source, &destination);
+  printf("Shifted for 0, dim 0, displ -1: %d\n", destination);
+  
+  MPI_Cart_shift(cartesian,1,1, &source, &destination);
+  printf("Shifted for 0, dim 1, displ 1: %d\n", destination);
+  MPI_Cart_shift(cartesian,1,-1, &source, &destination);
+  printf("Shifted for 0, dim 1, displ -1: %d\n", destination);
+  
+}
+
 void run(int rank, int size) {
 #ifdef THREADS_MPI
   MPI_Register_Thread(rank);
   MPI_Init(NULL, NULL);
 #endif
 
-  send_recv(rank, size);
+  send_and_recv(rank, size);
   bcast(rank, size);
+  cart(rank, size);
 }
 
 int main(int argc, char* argv[]) {

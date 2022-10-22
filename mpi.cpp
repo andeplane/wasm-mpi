@@ -25,6 +25,8 @@
 #include <barrier>
 #include <thread>
 #include <iostream>
+#include <tuple>
+
 
 #if defined(_WIN32)
 #define WIN32_LEAN_AND_MEAN
@@ -88,6 +90,10 @@ MPI_STATE state(2);
 
 int get_rank() {
   return thread_id_map[pthread_self()];
+}
+
+int get_size() {
+  return thread_id_map.size();
 }
 
 static std::atomic<int64_t> initialize_counter = 0;
@@ -531,32 +537,66 @@ int MPI_Group_free(MPI_Group *group)
 }
 
 /* ---------------------------------------------------------------------- */
+std::map<int, std::tuple<int, int, int>> rank_cart_map;
+std::map<std::tuple<int, int, int>, int> rank_cart_inverse_map;
+std::tuple<int, int, int> cart_dims;
 
 int MPI_Cart_create(MPI_Comm comm_old, int ndims, int *dims, int *periods, int reorder,
                     MPI_Comm *comm_cart)
 {
-  printf("MPI_Cart_create\n");
+  assert(ndims == 3 && "MPI_Cart_create only supports 3 dimensions.");
+  assert(periods[0] == 1 && "MPI_Cart_create only supports 3 dimensions.");
+  assert(periods[1] == 1 && "MPI_Cart_create only supports 3 dimensions.");
+  assert(periods[2] == 1 && "MPI_Cart_create only supports 3 dimensions.");
+
+  if (get_rank() == 0) {
+    for (int i = 0; i < dims[0]; i++) {
+      for (int j = 0; j < dims[1]; j++) {
+        for (int k = 0; j < dims[2]; j++) {
+          int thread_index = k + j * dims[2] + i * dims[2] * dims[1];
+          rank_cart_map[thread_index] = std::make_tuple(i, j, k);
+          rank_cart_inverse_map[rank_cart_map[thread_index]] = thread_index;
+        }
+      }
+    }
+    cart_dims = std::make_tuple(dims[0], dims[1], dims[2]);
+  }
+  barrier.arrive_and_wait();
+
   *comm_cart = comm_old;
-  return 0;
+  return MPI_SUCCESS;
 }
 
 /* ---------------------------------------------------------------------- */
 
 int MPI_Cart_get(MPI_Comm comm, int maxdims, int *dims, int *periods, int *coords)
 {
-  printf("MPI_Cart_get\n");
   dims[0] = dims[1] = dims[2] = 1;
   periods[0] = periods[1] = periods[2] = 1;
-  coords[0] = coords[1] = coords[2] = 0;
-  return 0;
+  auto my_coords = rank_cart_map[get_rank()];
+  coords[0] = std::get<0>(my_coords);
+  coords[1] = std::get<1>(my_coords);
+  coords[2] = std::get<2>(my_coords);
+  return MPI_SUCCESS;
 }
 
 /* ---------------------------------------------------------------------- */
 
 int MPI_Cart_shift(MPI_Comm comm, int direction, int displ, int *source, int *dest)
 {
-  printf("MPI_Cart_shift\n");
-  *source = *dest = 0;
+  auto coords = rank_cart_map[*source];
+  if (direction == 0) {
+    int element = (std::get<0>(coords) + displ + std::get<0>(cart_dims)) % std::get<0>(cart_dims);
+    std::get<0>(coords) = element;
+  } else if (direction == 1) {
+    int element = (std::get<1>(coords) + displ + std::get<1>(cart_dims)) % std::get<1>(cart_dims);
+    std::get<1>(coords) = element;
+  } else if (direction == 2) {
+    int element = (std::get<2>(coords) + displ + std::get<2>(cart_dims)) % std::get<2>(cart_dims);
+    std::get<2>(coords) = element;
+  }
+  *dest = rank_cart_inverse_map[coords];
+
   return 0;
 }
 
@@ -564,8 +604,7 @@ int MPI_Cart_shift(MPI_Comm comm, int direction, int displ, int *source, int *de
 
 int MPI_Cart_rank(MPI_Comm comm, int *coords, int *rank)
 {
-  printf("MPI_Cart_rank\n");
-  *rank = 0;
+  *rank = rank_cart_inverse_map[std::make_tuple(coords[0], coords[1], coords[2])];
   return 0;
 }
 
