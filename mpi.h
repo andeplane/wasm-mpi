@@ -14,6 +14,8 @@
 #ifndef MPI_STUBS
 #define MPI_STUBS
 #include <map>
+#include <barrier>
+#include <functional>
 #include <stdlib.h>
 
 /* We compile STUBS with C++ so the symbols embedded
@@ -70,6 +72,16 @@
 #define MPI_MAX_PROCESSOR_NAME 128
 #define MPI_MAX_LIBRARY_VERSION_STRING 128
 
+struct MPI_STATE {
+  int num_threads;
+  std::barrier<> barrier;
+  // std::map<std::pair<int, int>, std::shared_ptr<std::barrier<>>> send_barriers;
+  std::map<std::pair<int, int>, std::shared_ptr<std::barrier<>>> send_barriers;
+  // std::map<std::pair<int, int>, std::barrier<std::function<void()>>> send_barriers;
+  // std::vector<std::barrier<std::function<void()>>> send_barriers(8, std::barrier(2));
+  MPI_STATE(int num_threads);
+};
+
 typedef void MPI_User_function(void *invec, void *inoutvec, int *len, MPI_Datatype *datatype);
 
 /* MPI data structs */
@@ -77,6 +89,7 @@ typedef void MPI_User_function(void *invec, void *inoutvec, int *len, MPI_Dataty
 struct _MPI_Status {
   int MPI_SOURCE;
 };
+
 typedef struct _MPI_Status MPI_Status;
 
 /* Function prototypes for MPI stubs */

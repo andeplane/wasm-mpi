@@ -52,14 +52,34 @@ int size_datatype[MAXEXTRA_DATATYPE];
 
 static std::map<pthread_t,int> thread_id_map;
 static std::map<pthread_t,bool> finalized_map;
-auto on_completion = []() noexcept { 
-  // locking not needed here
-  static auto phase = "... done\n" "Cleaning up...\n";
-  std::cout << phase;
-  phase = "... done\n";
-};
 
 std::barrier barrier(2);
+
+// std::function 
+MPI_STATE::MPI_STATE(int num_threads) : 
+  barrier(std::barrier(num_threads)) 
+{
+  // send_barriers
+  for (int i = 0; i < num_threads; i++) {
+    for (int j = 0; j < num_threads; j++) {
+      auto barrier = std::make_shared<std::barrier<>>(2);
+      send_barriers[std::make_pair(i, j)] = barrier;
+    }
+  }
+}
+
+MPI_STATE state(2);
+
+// static int _num_threads = 2;
+// MPI_STATE &get_state(int num_threads = _num_threads)
+// {
+//   _num_threads = num_threads;
+  
+//   /* Initializes bar the first time through this function */
+//   static MPI_STATE state(num_threads);
+
+//   return state;
+// }
 
 /* ---------------------------------------------------------------------- */
 /* MPI Functions */
@@ -273,15 +293,25 @@ int MPI_Request_free(MPI_Request *request)
 }
 
 /* ---------------------------------------------------------------------- */
+std::map<std::pair<int,int>, const void*> mpi_send_map;
+std::map<std::pair<int,int>, int> mpi_send_size_map;
+std::map<std::pair<int,int>, MPI_Datatype> mpi_send_datatype_map;
+// std::map<std::pair<int,int>, std::barrier> mpi_send_barrier;
 
 int MPI_Send(const void *buf, int count, MPI_Datatype datatype, int dest, int tag, MPI_Comm comm)
 {
-  printf("MPI_Send\n");
-  static int callcount = 0;
-  if (callcount == 0) {
-    printf("MPI Stub WARNING: Should not send message to self\n");
-    ++callcount;
-  }
+  auto threads_pair = std::make_pair(get_rank(), dest);
+  
+  mpi_send_map[threads_pair] = buf;
+  mpi_send_size_map[threads_pair] = count;
+  mpi_send_datatype_map[threads_pair] = datatype;
+  state.send_barriers[threads_pair]->arrive_and_wait();
+  state.send_barriers[threads_pair]->arrive_and_wait();
+  
+  mpi_send_map.erase(threads_pair);
+  mpi_send_size_map.erase(threads_pair);
+  mpi_send_datatype_map.erase(threads_pair);
+
   return 0;
 }
 
@@ -317,12 +347,13 @@ int MPI_Rsend(const void *buf, int count, MPI_Datatype datatype, int dest, int t
 int MPI_Recv(void *buf, int count, MPI_Datatype datatype, int source, int tag, MPI_Comm comm,
              MPI_Status *status)
 {
-  printf("MPI_Recv\n");
-  static int callcount = 0;
-  if (callcount == 0) {
-    printf("MPI Stub WARNING: Should not recv message from self\n");
-    ++callcount;
-  }
+  auto threads_pair = std::make_pair(source, get_rank());
+  
+  state.send_barriers[threads_pair]->arrive_and_wait();
+  auto buffer_size = mpi_send_size_map[threads_pair] * sizeof(mpi_send_datatype_map[threads_pair]);
+  std::memcpy(buf, mpi_send_map[threads_pair], buffer_size);
+  state.send_barriers[threads_pair]->arrive_and_wait();
+
   return 0;
 }
 
@@ -614,7 +645,6 @@ int MPI_Bcast(void *buf, int count, MPI_Datatype datatype, int root, MPI_Comm co
     memcpy(buf, bcast_buffer, count * sizeof(datatype));
     barrier.arrive_and_wait();
   }
-  printf("MPI_Bcast\n");
   return 0;
 }
 

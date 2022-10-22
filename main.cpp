@@ -72,7 +72,19 @@ void main_func(int rank) {
         }
     }
     MPI_Bcast(array, 10, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-    printf("I am thread %d with value %f\n", rank, array[0]);
+    printf("MPI_Bcast: I am thread %d with value %f\n", rank, array[0]);
+
+    if (rank == 0) {
+        for (int i = 0; i < 10; i++) {
+            array[i] = 20;
+        }
+        MPI_Send(array, 10, MPI_DOUBLE, 1, 0, MPI_COMM_WORLD);
+    } else {
+        MPI_Recv(array, 10, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    }
+
+    printf("MPI_Send / MPI_Recv: I am thread %d with value %f\n", rank, array[0]);
+
     // Get the name of the processor
     char processor_name[MPI_MAX_PROCESSOR_NAME];
     int name_len;
