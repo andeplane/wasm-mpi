@@ -90,9 +90,15 @@ int get_rank() {
   return thread_id_map[pthread_self()];
 }
 
+static std::atomic<int64_t> initialize_counter = 0;
+
 void MPI_Register_Thread(int rank) {
+  while (initialize_counter < rank) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
   thread_id_map[pthread_self()] = rank;
-  printf("Registered thread %ld with rank %d\n", pthread_self(), rank);
+  initialize_counter+=1;
+  // barrier.arrive_and_wait();
 }
 
 int MPI_Init(int *argc, char ***argv)
@@ -183,8 +189,6 @@ int MPI_Comm_rank(MPI_Comm comm, int *me)
   pthread_t thread_id = pthread_self();
 
   *me = thread_id_map[thread_id];
-  printf("MPI_Comm_rank\n");
-  printf("  MPI_Comm: %d\n", comm);
   return 0;
 }
 
@@ -195,7 +199,6 @@ int MPI_Comm_size(MPI_Comm comm, int *nprocs)
   pthread_t thread_id = pthread_self();
   
   *nprocs = thread_id_map.count(thread_id);
-  printf("MPI_Comm_size\n");
   return 0;
 }
 
@@ -212,15 +215,11 @@ int MPI_Abort(MPI_Comm comm, int errorcode)
 
 int MPI_Finalize()
 {
-  pthread_t thread_id = pthread_self();
-  auto thread_count = thread_id_map.count(thread_id);
-  auto finalize_count = finalized_map.count(get_rank());
-
-  if (thread_count == 0) {
+  if (initialized_map.count(get_rank()) == 0) {
     printf("MPI WARNING: MPI not yet initialized\n");
     return 1;
   }
-  if (finalize_count == 1) {
+  if (finalized_map.count(get_rank()) == 1) {
     printf("MPI WARNING: MPI already finalized\n");
     return 1;
   }
@@ -430,8 +429,8 @@ int MPI_Sendrecv(const void *sbuf, int scount, MPI_Datatype sdatatype, int dest,
   //   MPI_Send(sbuf, scount, sdatatype, dest, stag, comm);
   //   MPI_Recv(rbuf, rcount, rdatatype, source, rtag, comm, status);
   // } else {
-  //   MPI_Recv(sbuf, scount, sdatatype, dest, stag, comm, status);
-  //   MPI_Send(rbuf, rcount, rdatatype, source, rtag, comm);
+  //   MPI_Recv(rbuf, rcount, rdatatype, source, rtag, comm, status);
+  //   MPI_Send(sbuf, scount, sdatatype, dest, stag, comm);
   // }
 
   return 0;
