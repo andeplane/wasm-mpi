@@ -448,9 +448,15 @@ int MPI_Sendrecv(const void *sbuf, int scount, MPI_Datatype sdatatype, int dest,
     printf("  %d writing %f for pair (%d, %d)\n", get_rank(), dbuf[0], get_rank(), dest);
     printf("  %d checked that target is %p\n", get_rank(), sendrecv_sendbuffers[std::make_pair(get_rank(), dest)]);
   }
-
-  // int dest_lowest = std::min(dest, get_rank());
-  // int dest_highest = std::max(dest, get_rank());
+  if (dest < source) {
+    int lowest = std::min(dest, get_rank());
+    int highest = std::max(dest, get_rank());
+    state.send_barriers[std::make_pair(lowest, highest)]->arrive_and_wait();
+  } else {
+    int lowest = std::min(source, get_rank());
+    int highest = std::max(source, get_rank());
+    state.send_barriers[std::make_pair(lowest, highest)]->arrive_and_wait();
+  }
   // printf("%d waits for dest %d on barrier (%d,%d)\n",get_rank(), dest, dest_lowest, dest_highest);
 
   // state.send_barriers[std::make_pair(dest_lowest, dest_highest)]->arrive_and_wait();
