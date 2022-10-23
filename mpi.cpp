@@ -87,14 +87,6 @@ void MPI_Register_Thread(int rank, int num_threads) {
   initialize_counter+=1;
 
   if (rank == 0) {
-    size_datatype[MPI_INT] = sizeof(int);
-    size_datatype[MPI_FLOAT] = sizeof(float);
-    size_datatype[MPI_DOUBLE] = sizeof(double);
-    size_datatype[MPI_CHAR] = sizeof(char);
-    size_datatype[MPI_BYTE] = sizeof(char);
-    size_datatype[MPI_LONG] = sizeof(long);
-    size_datatype[MPI_LONG_LONG] = sizeof(long long);
-    size_datatype[MPI_DOUBLE_INT] = sizeof(double)+sizeof(int);
     state.num_threads = num_threads;
   }
   _MPI_Barrier(num_threads);
@@ -377,7 +369,7 @@ int MPI_Recv(void *buf, int count, MPI_Datatype datatype, int source, int tag, M
   auto threads_pair = std::make_pair(source, get_rank());
   
   state.send_barriers[threads_pair]->arrive_and_wait();
-  auto buffer_size = send_size_map[threads_pair] * size_datatype[datatype];
+  auto buffer_size = send_size_map[threads_pair] * stubtypesize(datatype);
   std::memcpy(buf, send_map[threads_pair], buffer_size);
   state.send_barriers[threads_pair]->arrive_and_wait();
 
@@ -727,7 +719,7 @@ int MPI_Bcast(void *buf, int count, MPI_Datatype datatype, int root, MPI_Comm co
     bcast_buffer = nullptr;
   } else {
     MPI_Barrier(MPI_COMM_WORLD);
-    memcpy(buf, bcast_buffer, count * size_datatype[datatype]);
+    memcpy(buf, bcast_buffer, count * stubtypesize(datatype));
     MPI_Barrier(MPI_COMM_WORLD);
   }
   return 0;
@@ -786,7 +778,7 @@ int MPI_Reduce(void *sendbuf, void *recvbuf, int count, MPI_Datatype datatype, M
   MPI_Barrier(MPI_COMM_WORLD);
   
   if (get_rank() == root) {
-    memcpy(recvbuf, sendbuf, count * size_datatype[datatype]);
+    memcpy(recvbuf, sendbuf, count * stubtypesize(datatype));
 
     for (int i = 0; i < get_size(); i++) {
       if (i == root) {
@@ -840,7 +832,7 @@ int MPI_Scan(void *sendbuf, void *recvbuf, int count, MPI_Datatype datatype, MPI
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
   scan_buffermap[get_rank()] = recvbuf;
-  memcpy(recvbuf, sendbuf, count * size_datatype[datatype]);
+  memcpy(recvbuf, sendbuf, count * stubtypesize(datatype));
   
   scan_counter+=1;
   MPI_Barrier(MPI_COMM_WORLD);
