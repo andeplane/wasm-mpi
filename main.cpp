@@ -26,7 +26,6 @@ void longCompute(int id, int iterations) {
 }
 
 void main_func(int rank, int size) {
-    std::cout << "  Started " << rank << std::endl;
     MPI_Register_Thread(rank, size);
     MPI_Init(NULL, NULL);
     int initialized;
@@ -34,7 +33,6 @@ void main_func(int rank, int size) {
 
     MPI_Finalize();
     MPI_Reset();
-    std::cout << "  MPI ended " << rank << std::endl;
 }
 
 void testMpi(int workload) {
