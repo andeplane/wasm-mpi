@@ -157,6 +157,21 @@ void sendrecv(int rank, int size) {
   TEST_CHECK(recv[0] == 10 * (recv_peer + 1));
 }
 
+void irecv(int rank, int size) {
+  int count = 10;
+  double value = 10 * (rank + 1);
+  std::vector<double> send(count, value);
+  std::vector<double> recv(count);
+
+  int peer = rank == 0 ? 1 : 0;
+  MPI_Request request;
+  MPI_Irecv(recv.data(), count, MPI_DOUBLE, peer, 0, MPI_COMM_WORLD, &request);
+  MPI_Send(send.data(), count, MPI_DOUBLE, peer, 0, MPI_COMM_WORLD);
+  MPI_Wait(&request, MPI_STATUS_IGNORE);
+  double targetValue = 10 * (rank + 1);
+  TEST_CHECK(recv[0] == targetValue);
+}
+
 void run(int rank, int size, void (*f)(int, int)) {
   MPI_Register_Thread(rank, size);
   MPI_Init(NULL, NULL);
@@ -216,6 +231,7 @@ void test_scan() {
   t1.join();
   t2.join();
 }
+
 void test_sendrecv() {
   int num_threads = 4;
   std::thread t1(run, 0, 4, sendrecv);
@@ -229,12 +245,22 @@ void test_sendrecv() {
   t4.join();
 }
 
+void test_irecv() {
+  int num_threads = 2;
+  std::thread t1(run, 0, num_threads, irecv);
+  std::thread t2(run, 1, num_threads, irecv);
+  
+  t1.join();
+  t2.join();
+}
+
 TEST_LIST = {
     { "send_and_recv", test_send_and_recv },
     { "bcast", test_bcast },
     { "reduce", test_reduce },
     { "allreduce", test_allreduce },
     { "sendrecv", test_sendrecv},
+    { "irecv", test_irecv},
     // { "scan", test_scan },
     { NULL, NULL }
 };

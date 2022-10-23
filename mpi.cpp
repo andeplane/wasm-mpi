@@ -64,6 +64,50 @@ const int MAX_THREADS = 8;
 
 MPI_STATE state(MAX_THREADS);
 
+void MPI_STATE::setRequest(MPI_Request_type type, int source, int dest, MPI_Datatype datatype, int count, int tag, MPI_Request request) {
+  MPI_RequestKey key = {
+    datatype,
+    type,
+    count,
+    source,
+    dest,
+    tag
+  };
+  std::lock_guard<std::mutex> guard(state.requestMutex);
+  state.requests[key] = request;
+}
+
+std::optional<MPI_Request> MPI_STATE::getRequest(MPI_Request_type type, int source, int dest, MPI_Datatype datatype, int count, int tag) {
+  MPI_RequestKey key = {
+    datatype,
+    type,
+    count,
+    source,
+    dest,
+    tag
+  };
+  std::lock_guard<std::mutex> guard(state.requestMutex);
+  std::optional<MPI_Request> request;
+  if (state.requests.count(key) > 0) {
+    request = state.requests[key];
+  }
+  return request;
+}
+
+void MPI_STATE::removeRequest(MPI_Request request) {
+  std::lock_guard<std::mutex> guard(state.requestMutex);
+  MPI_RequestKey key = {
+    request.datatype,
+    request.type,
+    request.count,
+    request.source,
+    request.dest,
+    request.tag
+  };
+
+  state.requests.erase(key);
+}
+
 void MPI_Reset() {
   if (get_rank() == 0) {
     thread_id_map.clear();
@@ -309,25 +353,28 @@ int MPI_Request_free(MPI_Request *request)
 }
 
 /* ---------------------------------------------------------------------- */
-std::map<std::pair<int,int>, const void*> send_map;
-std::map<std::pair<int,int>, int> send_size_map;
-std::map<std::pair<int,int>, MPI_Datatype> send_datatype_map;
-
 int MPI_Send(const void *buf, int count, MPI_Datatype datatype, int dest, int tag, MPI_Comm comm)
 {
-  auto threads_pair = std::make_pair(get_rank(), dest);
-  
-  send_map[threads_pair] = buf;
-  send_size_map[threads_pair] = count;
-  send_datatype_map[threads_pair] = datatype;
-  state.send_barriers[threads_pair]->arrive_and_wait();
-  state.send_barriers[threads_pair]->arrive_and_wait();
-  
-  send_map.erase(threads_pair);
-  send_size_map.erase(threads_pair);
-  send_datatype_map.erase(threads_pair);
+  MPI_Request request = {
+    datatype,
+    MPI_Send_t,
+    count,
+    get_rank(),
+    dest,
+    tag,
+    comm,
+    buf,
+    nullptr,
+  };
 
-  return 0;
+  state.setRequest(MPI_Send_t, get_rank(), dest, datatype, count, tag, request);
+  
+  // Lock thread until data is read
+  while (state.getRequest(MPI_Send_t, get_rank(), dest, datatype, count, tag)) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+
+  return MPI_SUCCESS;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -362,14 +409,15 @@ int MPI_Rsend(const void *buf, int count, MPI_Datatype datatype, int dest, int t
 int MPI_Recv(void *buf, int count, MPI_Datatype datatype, int source, int tag, MPI_Comm comm,
              MPI_Status *status)
 {
-  auto threads_pair = std::make_pair(source, get_rank());
-  
-  state.send_barriers[threads_pair]->arrive_and_wait();
-  auto buffer_size = send_size_map[threads_pair] * stubtypesize(datatype);
-  std::memcpy(buf, send_map[threads_pair], buffer_size);
-  state.send_barriers[threads_pair]->arrive_and_wait();
+  // Lock thread until data is read
+  while (!state.getRequest(MPI_Send_t, source, get_rank(), datatype, count, tag)) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  std::optional<MPI_Request> request = state.getRequest(MPI_Send_t, source, get_rank(), datatype, count, tag);
+  std::memcpy(buf, request->sendbuf, request->count * stubtypesize(request->datatype));
+  state.removeRequest(*request);
 
-  return 0;
+  return MPI_SUCCESS;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -377,26 +425,26 @@ int MPI_Recv(void *buf, int count, MPI_Datatype datatype, int source, int tag, M
 int MPI_Irecv(void *buf, int count, MPI_Datatype datatype, int source, int tag, MPI_Comm comm,
               MPI_Request *request)
 {
-  static int callcount = 0;
-  if (callcount == 0) {
-    printf("MPI WARNING: MPI_Irecv not implemented\n");
-    ++callcount;
-  }
-
-  return 0;
+  request->count = count;
+  request->datatype = datatype;
+  request->source = source;
+  request->tag = tag;
+  request->comm = comm;
+  request->type = MPI_Irecv_t;
+  
+  return MPI_SUCCESS;
 }
 
 /* ---------------------------------------------------------------------- */
 
 int MPI_Wait(MPI_Request *request, MPI_Status *status)
 {
-  static int callcount = 0;
-  if (callcount == 0) {
-        printf("MPI WARNING: MPI_Wait not implemented\n");
-
-    ++callcount;
+  if (request->type == MPI_Irecv_t) {
+    MPI_Recv(request->recvbuf, request->count, request->datatype, request->source, request->tag, request->comm, status);
+  } else {
+    printf("MPI WARNING: MPI_Wait for this request type not supported\n");
   }
-  return 0;
+  return MPI_SUCCESS;
 }
 
 /* ---------------------------------------------------------------------- */

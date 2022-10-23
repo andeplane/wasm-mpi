@@ -3,6 +3,7 @@
 #include <map>
 #include <barrier>
 #include <functional>
+#include <thread>
 #include <stdlib.h>
 
 #ifndef __cplusplus
@@ -40,7 +41,6 @@
 #define MPI_STATUS_IGNORE NULL
 
 #define MPI_Comm int
-#define MPI_Request int
 #define MPI_Datatype int
 #define MPI_Op int
 #define MPI_Fint int
@@ -51,6 +51,48 @@
 
 #define MPI_MAX_PROCESSOR_NAME 128
 #define MPI_MAX_LIBRARY_VERSION_STRING 128
+enum MPI_Request_type {
+  MPI_Irecv_t = 0,
+  MPI_Send_t = 1,
+  MPI_Recv_t = 2
+};
+
+struct MPI_RequestKey {
+  MPI_Datatype datatype;
+  MPI_Request_type type;
+  int count;
+  int source;
+  int dest;
+  int tag;
+  bool const operator==(const MPI_RequestKey &o) {
+    return datatype == o.datatype
+       &&  type == o.type
+       &&  count == o.count
+       &&  source == o.source
+       &&  dest == o.dest
+       &&  tag == o.tag;
+  }
+
+  bool const operator<(const MPI_RequestKey &o) const {
+      return datatype < o.datatype
+          || (datatype == o.datatype && type < o.type)
+          || (datatype == o.datatype && type == o.type && source < o.source)
+          || (datatype == o.datatype && type == o.type && source == o.source && dest < o.dest)
+          || (datatype == o.datatype && type == o.type && source == o.source && dest == o.dest && tag < o.tag);
+  }
+};
+
+struct MPI_Request {
+  MPI_Datatype datatype;
+  MPI_Request_type type;
+  int count;
+  int source;
+  int dest;
+  int tag;
+  MPI_Comm comm;
+  const void *sendbuf;
+  void *recvbuf;
+};
 
 struct MPI_STATE {
   int num_threads;
@@ -63,8 +105,15 @@ struct MPI_STATE {
   std::barrier<> barrier_7=std::barrier(7);
   std::barrier<> barrier_8=std::barrier(8);
   std::map<std::pair<int, int>, std::shared_ptr<std::barrier<>>> send_barriers;
+  std::mutex requestMutex;
+  std::map<MPI_RequestKey, MPI_Request> requests;
   MPI_STATE(int num_threads);
+
+  void setRequest(MPI_Request_type type, int source, int dest, MPI_Datatype datatype, int count, int tag, MPI_Request request);
+  std::optional<MPI_Request> getRequest(MPI_Request_type type, int source, int dest, MPI_Datatype datatype, int count, int tag);
+  void removeRequest(MPI_Request request);
 };
+
 void MPI_Reset();
 void _MPI_Barrier(int num_threads);
 typedef void MPI_User_function(void *invec, void *inoutvec, int *len, MPI_Datatype *datatype);
