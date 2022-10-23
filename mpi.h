@@ -1,16 +1,3 @@
-/* -*- c++ -*- -----------------------------------------------------------
-   LAMMPS 2003 (July 31) - Molecular Dynamics Simulator
-   Sandia National Laboratories, www.cs.sandia.gov/~sjplimp/lammps.html
-   Steve Plimpton, sjplimp@sandia.gov
-
-   Copyright (2003) Sandia Corporation.  Under the terms of Contract
-   DE-AC04-94AL85000 with Sandia Corporation, the U.S. Government retains
-   certain rights in this software.  This software is distributed under
-   the GNU General Public License.
-
-   See the README file in the top-level LAMMPS directory.
------------------------------------------------------------------------- */
-
 #ifndef MPI_STUBS
 #define MPI_STUBS
 #include <map>
@@ -18,17 +5,9 @@
 #include <functional>
 #include <stdlib.h>
 
-/* We compile STUBS with C++ so the symbols embedded
- * the serial shared library will not collide with any
- * corresponding symbols from a real MPI library (which
- * uses C bindings). As a consequence the header *must*
- * enforce compiling with C++ only. */
-
 #ifndef __cplusplus
 #error "MPI STUBS must be compiled with a C++ compiler"
 #endif
-
-/* Dummy defs for MPI stubs */
 
 #define MPI_COMM_WORLD 0
 
@@ -75,14 +54,19 @@
 
 struct MPI_STATE {
   int num_threads;
-  std::barrier<> barrier;
-  // std::map<std::pair<int, int>, std::shared_ptr<std::barrier<>>> send_barriers;
+  int max_threads;
+  std::barrier<> barrier_2=std::barrier(2);
+  std::barrier<> barrier_3=std::barrier(3);
+  std::barrier<> barrier_4=std::barrier(4);
+  std::barrier<> barrier_5=std::barrier(5);
+  std::barrier<> barrier_6=std::barrier(6);
+  std::barrier<> barrier_7=std::barrier(7);
+  std::barrier<> barrier_8=std::barrier(8);
   std::map<std::pair<int, int>, std::shared_ptr<std::barrier<>>> send_barriers;
-  // std::map<std::pair<int, int>, std::barrier<std::function<void()>>> send_barriers;
-  // std::vector<std::barrier<std::function<void()>>> send_barriers(8, std::barrier(2));
   MPI_STATE(int num_threads);
 };
 void MPI_Reset();
+void _MPI_Barrier(int num_threads);
 typedef void MPI_User_function(void *invec, void *inoutvec, int *len, MPI_Datatype *datatype);
 
 /* MPI data structs */
@@ -94,7 +78,7 @@ struct _MPI_Status {
 typedef struct _MPI_Status MPI_Status;
 
 /* Function prototypes for MPI stubs */
-void MPI_Register_Thread(int rank);
+void MPI_Register_Thread(int rank, int num_threads);
 int MPI_Init(int *argc, char ***argv);
 int MPI_Initialized(int *flag);
 int MPI_Finalized(int *flag);

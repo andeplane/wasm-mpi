@@ -10,19 +10,33 @@
         </style>
     </head>
     <body>
-        <button class="favorite styled" type="button" onclick="runMain()">Run</button>
+        <div>
+            <button class="favorite styled" type="button" onclick="runSerial()">Run serial</button>
+            <button class="favorite styled" type="button" onclick="runMpi()">Run MPI</button>
+        </div>
+
+        <textarea cols="50" rows="50" id="output">
+            
+        </textarea>
         <script src="lib.js"></script>
         <script>
-            function runWorker(method) {
-                const worker = new Worker('./worker.js')
-                worker.onmessage = e => console.log(e)
-                worker.postMessage(method)
-            }
-
-            function runMain() {
-                LibModule().then( lib => {
-                    lib.go()
+            function runSerial() {
+                LibModule({print: addText}).then( lib => {
+                    let a = performance.now()
+                    lib.testSerial(4)
+                    addText( `serial done in ${(performance.now()-a)}ms` )
                 })
+            }
+            function runMpi() {
+                LibModule({print: addText}).then( lib => {
+                    let a = performance.now()
+                    lib.testMpi(4)
+                    addText( `mpi done in ${(performance.now()-a)}ms` )
+                })
+            }
+            function addText(text) {
+                console.log(text)
+                document.getElementById("output").value += text+'\n'
             }
         </script>
     </body>
