@@ -426,10 +426,7 @@ int MPI_Waitany(int count, MPI_Request *request, int *index, MPI_Status *status)
 /* ---------------------------------------------------------------------- */
 std::mutex sendrecv_mutex;
 std::map<std::pair<int, int>, const void *> sendrecv_sendbuffers;
-std::map<std::pair<int, int>, void *> sendrecv_recvbuffers;
 std::map<std::pair<int, int>, int> sendrecv_sendcount;
-std::map<std::pair<int, int>, int> sendrecv_recvcount;
-std::map<std::pair<int, int>, int> sendrecv_recvdatatype;
 std::map<std::pair<int, int>, int> sendrecv_senddatatype;
 
 int MPI_Sendrecv(const void *sbuf, int scount, MPI_Datatype sdatatype, int dest, int stag,
