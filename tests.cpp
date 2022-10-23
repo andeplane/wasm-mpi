@@ -143,6 +143,20 @@ void scan(int rank, int size) {
   printf("MPI_Scan: I am thread %d with value %f\n", rank, d_reduce[0]);
 }
 
+void sendrecv(int rank, int size) {
+  // Note: Implementation requires that all processors will send and receive, but this is not necessarily the case.
+  int count = 10;
+  double value = 10 * (rank + 1);
+  std::vector<double> send(count, value);
+  std::vector<double> recv(count);
+
+  int send_peer = (rank + 1) % size;
+  int recv_peer = (rank - 1 + size) % size;
+  
+  MPI_Sendrecv(send.data(), count, MPI_DOUBLE, send_peer, 0, recv.data(), count, MPI_DOUBLE, recv_peer, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+  TEST_CHECK(recv[0] == 10 * (recv_peer + 1));
+}
+
 void run(int rank, int size, void (*f)(int, int)) {
   MPI_Register_Thread(rank, size);
   MPI_Init(NULL, NULL);
@@ -155,8 +169,8 @@ void run(int rank, int size, void (*f)(int, int)) {
 
 void test_send_and_recv() {
   int num_threads = 2;
-  std::thread t1(run, 0, 2, &send_and_recv);
-  std::thread t2(run, 1, 2, &send_and_recv);
+  std::thread t1(run, 0, 2, send_and_recv);
+  std::thread t2(run, 1, 2, send_and_recv);
 
   t1.join();
   t2.join();
@@ -164,43 +178,55 @@ void test_send_and_recv() {
 
 void test_bcast() {
   int num_threads = 2;
-  std::thread t1(run, 0, 2, &bcast);
-  std::thread t2(run, 1, 2, &bcast);
+  std::thread t1(run, 0, 2, bcast);
+  std::thread t2(run, 1, 2, bcast);
 
   t1.join();
   t2.join();
 }
 void test_cart() {
   int num_threads = 2;
-  std::thread t1(run, 0, 2, &cart);
-  std::thread t2(run, 1, 2, &cart);
+  std::thread t1(run, 0, 2, cart);
+  std::thread t2(run, 1, 2, cart);
 
   t1.join();
   t2.join();
 }
 void test_reduce() {
   int num_threads = 2;
-  std::thread t1(run, 0, 2, &reduce);
-  std::thread t2(run, 1, 2, &reduce);
+  std::thread t1(run, 0, 2, reduce);
+  std::thread t2(run, 1, 2, reduce);
 
   t1.join();
   t2.join();
 }
 void test_allreduce() {
   int num_threads = 2;
-  std::thread t1(run, 0, 2, &allreduce);
-  std::thread t2(run, 1, 2, &allreduce);
+  std::thread t1(run, 0, 2, allreduce);
+  std::thread t2(run, 1, 2, allreduce);
 
   t1.join();
   t2.join();
 }
 void test_scan() {
   int num_threads = 2;
-  std::thread t1(run, 0, 2, &scan);
-  std::thread t2(run, 1, 2, &scan);
+  std::thread t1(run, 0, 2, scan);
+  std::thread t2(run, 1, 2, scan);
 
   t1.join();
   t2.join();
+}
+void test_sendrecv() {
+  int num_threads = 4;
+  std::thread t1(run, 0, 4, sendrecv);
+  std::thread t2(run, 1, 4, sendrecv);
+  std::thread t3(run, 2, 4, sendrecv);
+  std::thread t4(run, 3, 4, sendrecv);
+
+  t1.join();
+  t2.join();
+  t3.join();
+  t4.join();
 }
 
 TEST_LIST = {
@@ -208,7 +234,7 @@ TEST_LIST = {
     { "bcast", test_bcast },
     { "reduce", test_reduce },
     { "allreduce", test_allreduce },
-    // { "cart", test_cart },
+    { "sendrecv", test_sendrecv},
     // { "scan", test_scan },
     { NULL, NULL }
 };

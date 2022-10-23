@@ -13,18 +13,26 @@
         <div>
             <button class="favorite styled" type="button" onclick="runSerial()">Run serial</button>
             <button class="favorite styled" type="button" onclick="runMpi()">Run MPI</button>
+            <button class="favorite styled" type="button" onclick="runLammps()">Run LAMMPS</button>
         </div>
 
         <textarea cols="50" rows="50" id="output">
             
         </textarea>
-        <script src="lib.js"></script>
+        <!-- <script src="lib.js"></script> -->
+        <script src="lammps.js"></script>
         <script>
             function runSerial() {
                 LibModule({print: addText}).then( lib => {
                     let a = performance.now()
                     lib.testSerial(4)
                     addText( `serial done in ${(performance.now()-a)}ms` )
+                })
+            }
+            function runLammps() {
+                LibModule({print: addText}).then( lmpWasm => {
+                    window.lmpWasm = lmpWasm
+                    lmpWasm.runMpi(4)
                 })
             }
             function runMpi() {

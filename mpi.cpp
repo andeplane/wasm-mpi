@@ -187,9 +187,7 @@ int MPI_Get_version(int *major, int *minor)
 
 int MPI_Comm_rank(MPI_Comm comm, int *me)
 {
-  pthread_t thread_id = pthread_self();
-
-  *me = thread_id_map[thread_id];
+  *me = get_rank();
   return 0;
 }
 
@@ -197,9 +195,7 @@ int MPI_Comm_rank(MPI_Comm comm, int *me)
 
 int MPI_Comm_size(MPI_Comm comm, int *nprocs)
 {
-  pthread_t thread_id = pthread_self();
-  
-  *nprocs = thread_id_map.count(thread_id);
+  *nprocs = state.num_threads;
   return 0;
 }
 
@@ -428,25 +424,38 @@ int MPI_Waitany(int count, MPI_Request *request, int *index, MPI_Status *status)
 }
 
 /* ---------------------------------------------------------------------- */
+std::mutex sendrecv_mutex;
+std::map<std::pair<int, int>, const void *> sendrecv_sendbuffers;
+std::map<std::pair<int, int>, void *> sendrecv_recvbuffers;
+std::map<std::pair<int, int>, int> sendrecv_sendcount;
+std::map<std::pair<int, int>, int> sendrecv_recvcount;
+std::map<std::pair<int, int>, int> sendrecv_recvdatatype;
+std::map<std::pair<int, int>, int> sendrecv_senddatatype;
 
 int MPI_Sendrecv(const void *sbuf, int scount, MPI_Datatype sdatatype, int dest, int stag,
                  void *rbuf, int rcount, MPI_Datatype rdatatype, int source, int rtag,
                  MPI_Comm comm, MPI_Status *status)
 {
-  static int callcount = 0;
-  if (callcount == 0) {
-    printf("MPI WARNING: MPI_Sendrecv not implemented\n");
-    ++callcount;
+  // Note: This requires that all processors will send and receive, but this is not necessarily the case.
+  {
+    std::lock_guard<std::mutex> guard(sendrecv_mutex);
+    sendrecv_sendbuffers[std::make_pair(get_rank(), dest)] = sbuf;
+    sendrecv_sendcount[std::make_pair(get_rank(), dest)] = scount;
+    sendrecv_senddatatype[std::make_pair(get_rank(), dest)] = sdatatype;
+    double *dbuf = (double*)sbuf;
   }
-
-  // if (source == get_rank()) {
-  //   MPI_Send(sbuf, scount, sdatatype, dest, stag, comm);
-  //   MPI_Recv(rbuf, rcount, rdatatype, source, rtag, comm, status);
-  // } else {
-  //   MPI_Recv(rbuf, rcount, rdatatype, source, rtag, comm, status);
-  //   MPI_Send(sbuf, scount, sdatatype, dest, stag, comm);
-  // }
-
+  
+  MPI_Barrier(MPI_COMM_WORLD);
+  
+  {
+    std::lock_guard<std::mutex> guard(sendrecv_mutex);
+    memcpy(rbuf, 
+      sendrecv_sendbuffers[std::make_pair(source, get_rank())],
+      sendrecv_sendcount[std::make_pair(source, get_rank())] * stubtypesize(sendrecv_senddatatype[std::make_pair(source, get_rank())])
+    );
+  }
+  MPI_Barrier(MPI_COMM_WORLD);
+  
   return 0;
 }
 
