@@ -144,22 +144,17 @@ void scan(int rank, int size) {
 }
 
 void sendrecv(int rank, int size) {
+  // Note: Implementation requires that all processors will send and receive, but this is not necessarily the case.
   int count = 10;
   double value = 10 * (rank + 1);
-  // double *send = new double[count];
-  // for (int i = 0; i<count; i++) {
-  //   send[i] = value;
-  // }
   std::vector<double> send(count, value);
   std::vector<double> recv(count);
 
   int send_peer = (rank + 1) % size;
   int recv_peer = (rank - 1 + size) % size;
-  printf("I am %d with ptr %p and will send %f to %d and receive from %d\n", rank, send.data(), value, send_peer, recv_peer);
-
+  
   MPI_Sendrecv(send.data(), count, MPI_DOUBLE, send_peer, 0, recv.data(), count, MPI_DOUBLE, recv_peer, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-
-  printf("I am thread %d and received %f from %d\n", rank, recv[0], recv_peer);
+  TEST_CHECK(recv[0] == 10 * (recv_peer + 1));
 }
 
 void run(int rank, int size, void (*f)(int, int)) {

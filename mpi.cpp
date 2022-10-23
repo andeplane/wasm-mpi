@@ -436,46 +436,25 @@ int MPI_Sendrecv(const void *sbuf, int scount, MPI_Datatype sdatatype, int dest,
                  void *rbuf, int rcount, MPI_Datatype rdatatype, int source, int rtag,
                  MPI_Comm comm, MPI_Status *status)
 {
-  // assert(dest == source && "" && "MPI_Sendrecv only supports sender and receiver to be same.");
-  
+  // Note: This requires that all processors will send and receive, but this is not necessarily the case.
   {
     std::lock_guard<std::mutex> guard(sendrecv_mutex);
-    printf("  %d will write to %p\n", get_rank(), sbuf);
     sendrecv_sendbuffers[std::make_pair(get_rank(), dest)] = sbuf;
     sendrecv_sendcount[std::make_pair(get_rank(), dest)] = scount;
     sendrecv_senddatatype[std::make_pair(get_rank(), dest)] = sdatatype;
     double *dbuf = (double*)sbuf;
-    printf("  %d writing %f for pair (%d, %d)\n", get_rank(), dbuf[0], get_rank(), dest);
-    printf("  %d checked that target is %p\n", get_rank(), sendrecv_sendbuffers[std::make_pair(get_rank(), dest)]);
   }
-  if (dest < source) {
-    int lowest = std::min(dest, get_rank());
-    int highest = std::max(dest, get_rank());
-    state.send_barriers[std::make_pair(lowest, highest)]->arrive_and_wait();
-  } else {
-    int lowest = std::min(source, get_rank());
-    int highest = std::max(source, get_rank());
-    state.send_barriers[std::make_pair(lowest, highest)]->arrive_and_wait();
-  }
-  // printf("%d waits for dest %d on barrier (%d,%d)\n",get_rank(), dest, dest_lowest, dest_highest);
-
-  // state.send_barriers[std::make_pair(dest_lowest, dest_highest)]->arrive_and_wait();
-
-  // int source_lowest = std::min(source, get_rank());
-  // int source_highest = std::max(source, get_rank());
-  // printf("%d waits for source %d on barrier (%d,%d)\n",get_rank(), source, source_lowest, source_highest);
-
-  // state.send_barriers[std::make_pair(source_lowest, source_highest)]->arrive_and_wait();
-
+  
+  MPI_Barrier(MPI_COMM_WORLD);
+  
   {
     std::lock_guard<std::mutex> guard(sendrecv_mutex);
-    printf("  %d will read pair (%d, %d) from %p\n", get_rank(), source, get_rank(), sendrecv_sendbuffers[std::make_pair(source, get_rank())]);
-    // printf("  %d reading %f for pair (%d, %d)\n", get_rank(), dbuf[0], source, get_rank());
     memcpy(rbuf, 
       sendrecv_sendbuffers[std::make_pair(source, get_rank())],
       sendrecv_sendcount[std::make_pair(source, get_rank())] * stubtypesize(sendrecv_senddatatype[std::make_pair(source, get_rank())])
     );
   }
+  MPI_Barrier(MPI_COMM_WORLD);
   
   return 0;
 }
