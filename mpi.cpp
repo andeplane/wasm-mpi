@@ -49,31 +49,43 @@ int get_size() {
   return thread_id_map.size();
 }
 
-MPI_STATE::MPI_STATE(int num_threads) : 
-  barrier(std::barrier(num_threads)) 
+MPI_STATE::MPI_STATE(int max_threads) : 
+  max_threads(max_threads)
 {
   // send_barriers
-  for (int i = 0; i < num_threads; i++) {
-    for (int j = 0; j < num_threads; j++) {
+  for (int i = 0; i < max_threads; i++) {
+    for (int j = 0; j < max_threads; j++) {
       auto barrier = std::make_shared<std::barrier<>>(2);
       send_barriers[std::make_pair(i, j)] = barrier;
     }
   }
 }
+const int MAX_THREADS = 8;
 
-MPI_STATE state(4);
+MPI_STATE state(MAX_THREADS);
+
+void MPI_Reset() {
+  if (get_rank() == 0) {
+    thread_id_map.clear();
+    finalized_map.clear();
+    initialized_map.clear();
+    initialize_counter = 0;
+  }
+  MPI_Barrier(MPI_COMM_WORLD);
+}
 
 /* ---------------------------------------------------------------------- */
 /* MPI Functions */
 /* ---------------------------------------------------------------------- */
 
-void MPI_Register_Thread(int rank) {
+void MPI_Register_Thread(int rank, int num_threads) {
   while (initialize_counter < rank) {
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }
 
   thread_id_map[pthread_self()] = rank;
   initialize_counter+=1;
+
   if (rank == 0) {
     size_datatype[MPI_INT] = sizeof(int);
     size_datatype[MPI_FLOAT] = sizeof(float);
@@ -83,9 +95,9 @@ void MPI_Register_Thread(int rank) {
     size_datatype[MPI_LONG] = sizeof(long);
     size_datatype[MPI_LONG_LONG] = sizeof(long long);
     size_datatype[MPI_DOUBLE_INT] = sizeof(double)+sizeof(int);
+    state.num_threads = num_threads;
   }
-  
-  state.barrier.arrive_and_wait();
+  _MPI_Barrier(num_threads);
 }
 
 int MPI_Init(int *argc, char ***argv)
@@ -97,20 +109,19 @@ int MPI_Init(int *argc, char ***argv)
   if (get_rank() == 0) {
     initialize_counter = 0;
   }
-  state.barrier.arrive_and_wait();
+  MPI_Barrier(MPI_COMM_WORLD);
 
   while (initialize_counter < get_rank()) {
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }
-  std::cout << "thread_id_map size: " << thread_id_map.size() << std::endl;
-
+  
   initialized_map[get_rank()] = true;
   initialize_counter+=1;
   if (initialize_counter > thread_id_map.size()) {
     printf("MPI_Init called for more threads than registered using MPI_Register_Thread. Aborting!");
     return MPI_ERR_OTHER;
   }
-  state.barrier.arrive_and_wait();
+  MPI_Barrier(MPI_COMM_WORLD);
   
   return MPI_SUCCESS;
 }
@@ -227,7 +238,7 @@ int MPI_Finalize()
   if (get_rank() == 0) {
     initialize_counter = 0;
   }
-  state.barrier.arrive_and_wait();
+  MPI_Barrier(MPI_COMM_WORLD);
 
   while (initialize_counter < get_rank()) {
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -566,7 +577,7 @@ int MPI_Cart_create(MPI_Comm comm_old, int ndims, int *dims, int *periods, int r
     }
     cart_dims = std::make_tuple(dims[0], dims[1], dims[2]);
   }
-  state.barrier.arrive_and_wait();
+  MPI_Barrier(MPI_COMM_WORLD);
 
   *comm_cart = comm_old;
   return MPI_SUCCESS;
@@ -679,10 +690,30 @@ int MPI_Op_free(MPI_Op *op)
 
 /* ---------------------------------------------------------------------- */
 
+void _MPI_Barrier(int num_threads)
+{
+  // TODO: Get rid of this insane hack.
+  if (num_threads == 2) {
+    state.barrier_2.arrive_and_wait();
+  } else if (num_threads == 3) {
+    state.barrier_3.arrive_and_wait();
+  } else if (num_threads == 4) {
+    state.barrier_4.arrive_and_wait();
+  } else if (num_threads == 5) {
+    state.barrier_5.arrive_and_wait();
+  } else if (num_threads == 6) {
+    state.barrier_6.arrive_and_wait();
+  } else if (num_threads == 7) {
+    state.barrier_7.arrive_and_wait();
+  } else if (num_threads == 8) {
+    state.barrier_8.arrive_and_wait();
+  }
+}
+
 int MPI_Barrier(MPI_Comm comm)
 {
-  state.barrier.arrive_and_wait();
-  return 0;
+  _MPI_Barrier(get_size());
+  return MPI_SUCCESS;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -691,13 +722,13 @@ int MPI_Bcast(void *buf, int count, MPI_Datatype datatype, int root, MPI_Comm co
 {
   if (get_rank() == root) {
     bcast_buffer = buf;
-    state.barrier.arrive_and_wait();
-    state.barrier.arrive_and_wait();
+    MPI_Barrier(MPI_COMM_WORLD);
+    MPI_Barrier(MPI_COMM_WORLD);
     bcast_buffer = nullptr;
   } else {
-    state.barrier.arrive_and_wait();
+    MPI_Barrier(MPI_COMM_WORLD);
     memcpy(buf, bcast_buffer, count * size_datatype[datatype]);
-    state.barrier.arrive_and_wait();
+    MPI_Barrier(MPI_COMM_WORLD);
   }
   return 0;
 }
@@ -744,7 +775,7 @@ int MPI_Reduce(void *sendbuf, void *recvbuf, int count, MPI_Datatype datatype, M
   if (get_rank() == 0) {
     reduce_counter = 0;
   }
-  state.barrier.arrive_and_wait();
+  MPI_Barrier(MPI_COMM_WORLD);
 
   // Write send buffers to map, one thread at a time
   while (reduce_counter < get_rank()) {
@@ -752,7 +783,7 @@ int MPI_Reduce(void *sendbuf, void *recvbuf, int count, MPI_Datatype datatype, M
   }
   reduce_buffermap[get_rank()] = sendbuf;
   reduce_counter++;
-  state.barrier.arrive_and_wait();
+  MPI_Barrier(MPI_COMM_WORLD);
   
   if (get_rank() == root) {
     memcpy(recvbuf, sendbuf, count * size_datatype[datatype]);
@@ -787,7 +818,7 @@ int MPI_Reduce(void *sendbuf, void *recvbuf, int count, MPI_Datatype datatype, M
       }
     }
   }
-  state.barrier.arrive_and_wait();
+  MPI_Barrier(MPI_COMM_WORLD);
 
   return MPI_SUCCESS;
 }
@@ -802,7 +833,7 @@ int MPI_Scan(void *sendbuf, void *recvbuf, int count, MPI_Datatype datatype, MPI
   if (get_rank() == 0) {
     scan_counter = 0;
   }
-  state.barrier.arrive_and_wait();
+  MPI_Barrier(MPI_COMM_WORLD);
 
   // Write send buffers to map, one thread at a time
   while (scan_counter < get_rank()) {
@@ -812,13 +843,13 @@ int MPI_Scan(void *sendbuf, void *recvbuf, int count, MPI_Datatype datatype, MPI
   memcpy(recvbuf, sendbuf, count * size_datatype[datatype]);
   
   scan_counter+=1;
-  state.barrier.arrive_and_wait();
+  MPI_Barrier(MPI_COMM_WORLD);
 
   // Reset scan counter
   if (get_rank() == 0) {
     scan_counter = 0;
   }
-  state.barrier.arrive_and_wait();
+  MPI_Barrier(MPI_COMM_WORLD);
 
   // Calculate sum of previous rank and this, one thread at a time
   while (scan_counter < get_rank()) {
@@ -852,7 +883,7 @@ int MPI_Scan(void *sendbuf, void *recvbuf, int count, MPI_Datatype datatype, MPI
     }
   }
   scan_counter+=1;
-  state.barrier.arrive_and_wait();
+  MPI_Barrier(MPI_COMM_WORLD);
   return 0;
 }
 

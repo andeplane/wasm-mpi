@@ -55,11 +55,18 @@
 struct MPI_STATE {
   int num_threads;
   int max_threads;
-  std::barrier<> barrier;
+  std::barrier<> barrier_2=std::barrier(2);
+  std::barrier<> barrier_3=std::barrier(3);
+  std::barrier<> barrier_4=std::barrier(4);
+  std::barrier<> barrier_5=std::barrier(5);
+  std::barrier<> barrier_6=std::barrier(6);
+  std::barrier<> barrier_7=std::barrier(7);
+  std::barrier<> barrier_8=std::barrier(8);
   std::map<std::pair<int, int>, std::shared_ptr<std::barrier<>>> send_barriers;
   MPI_STATE(int num_threads);
 };
 void MPI_Reset();
+void _MPI_Barrier(int num_threads);
 typedef void MPI_User_function(void *invec, void *inoutvec, int *len, MPI_Datatype *datatype);
 
 /* MPI data structs */
@@ -71,7 +78,7 @@ struct _MPI_Status {
 typedef struct _MPI_Status MPI_Status;
 
 /* Function prototypes for MPI stubs */
-void MPI_Register_Thread(int rank);
+void MPI_Register_Thread(int rank, int num_threads);
 int MPI_Init(int *argc, char ***argv);
 int MPI_Initialized(int *flag);
 int MPI_Finalized(int *flag);

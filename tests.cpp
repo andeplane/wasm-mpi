@@ -144,7 +144,7 @@ void scan(int rank, int size) {
 }
 
 void run(int rank, int size, void (*f)(int, int)) {
-  MPI_Register_Thread(rank);
+  MPI_Register_Thread(rank, size);
   MPI_Init(NULL, NULL);
 
   f(rank, size);

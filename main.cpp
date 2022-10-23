@@ -15,8 +15,6 @@
 using namespace emscripten ;
 #endif
 
-std::vector<int> s = {40000, 40000, 40000, 40000} ;
-
 void longCompute(int id, int iterations) {
     double val = 0 ;
     for (int i=0; i<10000; ++i) {
@@ -28,36 +26,34 @@ void longCompute(int id, int iterations) {
 }
 
 void main_func(int rank, int size) {
-    MPI_Register_Thread(rank);
+    std::cout << "  Started " << rank << std::endl;
+    MPI_Register_Thread(rank, size);
     MPI_Init(NULL, NULL);
     int initialized;
-    MPI_Initialized(&initialized);
-    std::cout << "Initialized: " << initialized << std::endl;
-
-    longCompute(rank, s[rank]);
+    longCompute(rank, 40000);
 
     MPI_Finalize();
-    // MPI_Reset();
+    MPI_Reset();
+    std::cout << "  MPI ended " << rank << std::endl;
 }
 
-void testMpi() {
-    std::cout << "Using MPI" << std::endl ;
-
+void testMpi(int workload) {
+    std::cout << "Using std::thread" << std::endl ;
     std::vector<std::thread> threads ;
-    for (int i = 0; i < s.size(); i++) {
-        threads.push_back( std::thread(main_func, i, 2) );
+    for (int i = 0; i < workload; i++) {
+        threads.push_back( std::thread(main_func, i, workload) ) ;
     }
-    std::cerr << "Starting MPI processes"<< std::endl ;
+    std::cerr << "start threads"<< std::endl ;
     for (auto &th : threads) {
         th.join() ;
     }
-    std::cerr << "end MPI"<< std::endl ;
+    std::cerr << "end threads"<< std::endl ;
 }
 
-void testSerial() {
+void testSerial(int workload) {
     std::cout << "Using serial" << std::endl ;
-    for (int i = 0; i < s.size(); i++) {
-        longCompute(i, s[i]) ;
+    for (int i = 0; i < workload; i++) {
+        longCompute(i, 40000) ;
     }
     std::cerr << "end serial"<< std::endl ;
 }
@@ -69,7 +65,7 @@ EMSCRIPTEN_BINDINGS(test) {
 }
 #else
 int main() {
-    testSerial();
-    testMpi();
+    testSerial(4);
+    testMpi(4);
 }
 #endif
